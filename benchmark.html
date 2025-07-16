@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Benchmark Results</title>
+  <style>
+    .benchmark-container { display: flex; flex-wrap: wrap; gap: 20px; }
+    .benchmark-item { flex: 1; min-width: 30%; }
+    .benchmark-image { width: 100%; max-width: 500px; }
+  </style>
+</head>
+<body>
+  <h2>Machine Translation WASM Engine (CPU) - engine.example.js</h2>
+  <div class="benchmark-container">
+    <div class="benchmark-item">
+      <h3>Node.js</h3>
+      <img src="./benchmark/plots/engine.example.js.node.png" alt="Node engine.example.js" class="benchmark-image">
+    </div>
+    <div class="benchmark-item">
+      <h3>Bun</h3>
+      <img src="./benchmark/plots/engine.example.js.bun.png" alt="Bun engine.example.js" class="benchmark-image">
+    </div>
+  </div>
+  <h2>Language Code Detection (CPU) - ld.example.js</h2>
+  <div class="benchmark-container">
+    <div class="benchmark-item">
+      <h3>Node.js</h3>
+      <img src="./benchmark/plots/ld.example.js.node.png" alt="Node ld.example.js" class="benchmark-image">
+    </div>
+    <div class="benchmark-item">
+      <h3>Bun</h3>
+      <img src="./benchmark/plots/ld.example.js.bun.png" alt="Bun ld.example.js" class="benchmark-image">
+    </div>
+  </div>
+  <h2>Model File Download Detection (IO) - models.example.js</h2>
+  <div class="benchmark-container">
+    <div class="benchmark-item">
+      <h3>Node.js</h3>
+      <img src="./benchmark/plots/models.example.js.node.png" alt="Node models.example.js" class="benchmark-image">
+    </div>
+    <div class="benchmark-item">
+      <h3>Bun</h3>
+      <img src="./benchmark/plots/models.example.js.bun.png" alt="Bun models.example.js" class="benchmark-image">
+    </div>
+  </div>
+  <h2>OpenCC WASM Conversion (CPU) - opencc.example.js</h2>
+  <div class="benchmark-container">
+    <div class="benchmark-item">
+      <h3>Node.js</h3>
+      <img src="./benchmark/plots/opencc.example.js.node.png" alt="Node opencc.example.js" class="benchmark-image">
+    </div>
+    <div class="benchmark-item">
+      <h3>Bun</h3>
+      <img src="./benchmark/plots/opencc.example.js.bun.png" alt="Bun opencc.example.js" class="benchmark-image">
+    </div>
+  </div>
+  <h2>Machine Translation Engine (CPU + IO) - translator.example.js</h2>
+  <div class="benchmark-container">
+    <div class="benchmark-item">
+      <h3>Node.js</h3>
+      <img src="./benchmark/plots/translator.example.js.node.png" alt="Node translator.example.js" class="benchmark-image">
+    </div>
+    <div class="benchmark-item">
+      <h3>Bun</h3>
+      <img src="./benchmark/plots/translator.example.js.bun.png" alt="Bun translator.example.js" class="benchmark-image">
+    </div>
+  </div>
+</body>
+</html>
