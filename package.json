@@ -1,0 +1,42 @@
+{
+  "name": "@mtran/core",
+  "homepage": "https://github.com/xxnuo",
+  "version": "3.0.2",
+  "type": "commonjs",
+  "main": "dist/mt.js",
+  "bin": {
+    "mt": "dist/mt.js"
+  },
+  "exports": {
+    ".": {
+      "node": {
+        "types": "./dist/translator.d.ts",
+        "default": "./dist/translator.js"
+      },
+      "require": {
+        "types": "./dist/translator.d.ts",
+        "default": "./dist/translator.js"
+      }
+    }
+  },
+  "keywords": [
+    "translation",
+    "offline",
+    "bergamot",
+    "machine-translation",
+    "nlp",
+    "node"
+  ],
+  "author": "xxnuo",
+  "license": "AGPL-3.0",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "axios": "^1.10.0",
+    "fasttext.wasm.js": "link:packages/fasttext.wasm.js",
+    "simplecc-wasm": "link:packages/simplecc-wasm",
+    "esbuild": "^0.25.6",
+    "esbuild-obfuscator-plugin": "^0.0.5"
+  }
+}
