@@ -99,6 +99,7 @@ class Lang {
   // Language Model alias: 模型支持的语言代码的别名，Key 是语言代码，Value 是别名
   static MALIAS = {
     "zh-CN": "zh-Hans",
+    "zh": "zh-Hans",
   };
 
   // Language Model can translate to zh: 可以由 OpenCC 转换为 zh 然后翻译的语言代码列表

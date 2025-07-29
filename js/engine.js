@@ -11,14 +11,10 @@ const path = require("path");
 const Lang = require("./lang");
 const loadBergamot = require("./bergamot");
 const Config = require("./config");
+const Logger = require("./logger");
+
 const WASM_PATH = path.join(__dirname, "./bergamot.wasm");
 const WASM_BINARY = fs.readFileSync(WASM_PATH);
-
-function log(...args) {
-  if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
-    console.log("Engine:", ...args);
-  }
-}
 
 // 每种文件类型的内存对齐要求，文件类型字符串应与模型注册表中的相同
 const MODEL_FILE_ALIGNMENTS = {
@@ -30,9 +26,15 @@ const MODEL_FILE_ALIGNMENTS = {
   trgvocab: 64,
 };
 
+// 常量定义
 const WHITESPACE_REGEX = /^(\s*)(.*?)(\s*)$/s; // 此正则表达式匹配文本前后的空白，以便保留它们
 const FULL_WIDTH_PUNCTUATION_LANGUAGE_TAGS = ["ja", "ko", "zh", ...Lang.MCC]; // 使用全角标点符号的语言列表
 const FULL_WIDTH_PUNCTUATION_REGEX = /([。！？])"/g; // 此正则表达式帮助对使用全角标点符号的语言进行句子分割
+
+// 获取内存配置
+const memoryConfig = Config.getMemoryConfig();
+const MEMORY_CLEANUP_INTERVAL = memoryConfig.wasmCleanupInterval; // 每 x 次翻译清理一次内存
+const MEMORY_CLEANUP_TIME_THRESHOLD = memoryConfig.wasmCleanupTimeout * 60 * 1000; // y 分钟内存清理时间阈值
 
 /**
  * 在将文本发送到翻译引擎之前，执行必要的清理步骤
@@ -47,6 +49,7 @@ function CleanText(sourceLanguage, sourceText) {
   if (!result) {
     throw new Error("Empty whitespace regex should always return a result.");
   }
+
   const whitespaceBefore = result[1];
   const whitespaceAfter = result[3];
   let cleanedSourceText = result[2];
@@ -74,10 +77,11 @@ async function InitWasm() {
   return new Promise((resolve, reject) => {
     const bergamot = loadBergamot({
       INITIAL_MEMORY: 234_291_200,
-      print: log,
+      print: (...args) => Logger.log("Engine", ...args),
       onAbort: () => reject(new Error("Error loading Bergamot wasm module.")),
       onRuntimeInitialized: async () => {
         await Promise.resolve();
+        Logger.debug("Engine", "Bergamot WASM module initialized successfully");
         resolve(bergamot);
       },
       wasmBinary: WASM_BINARY,
@@ -132,7 +136,7 @@ function getTranslationArgs(bergamot, sourceTexts, isHTML) {
           options.push_back(responseOption);
         }
       } catch (error) {
-        console.error("Error processing text for translation:", error);
+        Logger.error("Engine", "Error processing text for translation:", error);
         // 跳过此文本
       }
     }
@@ -174,6 +178,7 @@ function constructSingleTranslationModel(bergamot, translationModelPayload) {
   )
     ? "int8shiftAll"
     : "int8shiftAlphaAll";
+
   const config = generateTextConfig({
     "beam-size": "1",
     normalize: "1.0",
@@ -189,6 +194,11 @@ function constructSingleTranslationModel(bergamot, translationModelPayload) {
     "gemm-precision": gemmPrecision,
     alignment: "soft",
   });
+
+  Logger.debug(
+    "Engine",
+    `Creating translation model: ${sourceLanguage} -> ${targetLanguage}`
+  );
 
   return new bergamot.TranslationModel(
     sourceLanguage,
@@ -225,7 +235,6 @@ function allocateModelMemory(bergamot, languageModelFiles) {
     );
 
     alignedMemory.getByteArrayView().set(new Uint8Array(file.buffer));
-
     results[fileType] = alignedMemory;
   }
 
@@ -258,15 +267,17 @@ class Engine {
     this.bergamot = bergamot;
     /** @type {Bergamot["TranslationModel"][]} */
     this.languageTranslationModels = [];
+    /** @type {Object[]} */
+    this.allocatedMemoryBlocks = []; // 跟踪分配的内存块
+    /** @type {number} */
+    this.translationCount = 0; // 翻译计数
+    /** @type {number} */
+    this.lastMemoryCleanup = Date.now(); // 上次内存清理时间
+    /** @type {number} */
+    this.initialWasmMemorySize = bergamot.HEAP8 ? bergamot.HEAP8.length : 0;
 
     // 初始化翻译模型
-    for (const translationModelPayload of translationModelPayloads) {
-      const model = constructSingleTranslationModel(
-        bergamot,
-        translationModelPayload
-      );
-      this.languageTranslationModels.push(model);
-    }
+    this._initializeTranslationModels(translationModelPayloads);
 
     /** @type {Bergamot["BlockingService"]} */
     this.translationService = new bergamot.BlockingService({
@@ -276,112 +287,286 @@ class Engine {
     // 预创建常用的空结果对象，避免在空输入情况下创建新对象
     this.emptyBatchResult = [];
     this.emptyResult = "";
+
+    Logger.debug(
+      "Engine",
+      `Engine initialized for ${sourceLanguage} -> ${targetLanguage}`
+    );
+  }
+
+  /**
+   * 初始化翻译模型
+   * @param {Array<TranslationModelPayload>} translationModelPayloads
+   * @private
+   */
+  _initializeTranslationModels(translationModelPayloads) {
+    try {
+      for (const translationModelPayload of translationModelPayloads) {
+        const model = constructSingleTranslationModel(
+          this.bergamot,
+          translationModelPayload
+        );
+        this.languageTranslationModels.push(model);
+      }
+    } catch (error) {
+      Logger.error("Engine", "Failed to initialize translation models:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取当前WebAssembly内存使用情况
+   * @returns {{currentSize: number, initialSize: number, growth: number, growthMB: string}}
+   */
+  getWasmMemoryStats() {
+    const currentSize = this.bergamot.HEAP8 ? this.bergamot.HEAP8.length : 0;
+    const growth = currentSize - this.initialWasmMemorySize;
+    return {
+      currentSize: currentSize,
+      initialSize: this.initialWasmMemorySize,
+      growth: growth,
+      growthMB: (growth / 1024 / 1024).toFixed(2),
+    };
+  }
+
+  /**
+   * 强制执行WebAssembly内存清理
+   */
+  forceWasmMemoryCleanup() {
+    try {
+      // 强制执行延迟删除的对象
+      if (this.bergamot.flushPendingDeletes) {
+        this.bergamot.flushPendingDeletes();
+      }
+
+      // 记录清理时间
+      this.lastMemoryCleanup = Date.now();
+
+      const stats = this.getWasmMemoryStats();
+      Logger.debug(
+        "Engine",
+        `Memory cleanup completed - WASM size: ${stats.growthMB}MB growth`
+      );
+    } catch (error) {
+      Logger.error("Engine", "Failed to cleanup WASM memory:", error);
+    }
+  }
+
+  /**
+   * 检查是否需要进行内存清理
+   * @returns {boolean}
+   */
+  shouldCleanupMemory() {
+    const timeSinceLastCleanup = Date.now() - this.lastMemoryCleanup;
+    const translationsSinceCleanup =
+      this.translationCount % MEMORY_CLEANUP_INTERVAL;
+
+    // 每1000次翻译或每5分钟清理一次
+    return (
+      translationsSinceCleanup === 0 ||
+      timeSinceLastCleanup > MEMORY_CLEANUP_TIME_THRESHOLD
+    );
+  }
+
+  /**
+   * 执行翻译 - 单个模型
+   * @param {Bergamot["TranslationModel"]} model
+   * @param {Bergamot["VectorString"]} messages
+   * @param {Bergamot["VectorResponseOptions"]} options
+   * @returns {Promise<any>}
+   * @private
+   */
+  async _translateWithSingleModel(model, messages, options) {
+    return new Promise((resolve, reject) => {
+      try {
+        const result = this.translationService.translate(
+          model,
+          messages,
+          options
+        );
+        resolve(result);
+      } catch (error) {
+        reject(
+          new Error(`Translation failed: ${error.message || "Unknown error"}`)
+        );
+      }
+    });
+  }
+
+  /**
+   * 执行翻译 - 通过中转语言
+   * @param {Bergamot["TranslationModel"]} sourceModel
+   * @param {Bergamot["TranslationModel"]} targetModel
+   * @param {Bergamot["VectorString"]} messages
+   * @param {Bergamot["VectorResponseOptions"]} options
+   * @returns {Promise<any>}
+   * @private
+   */
+  async _translateViaPivoting(sourceModel, targetModel, messages, options) {
+    return new Promise((resolve, reject) => {
+      try {
+        const result = this.translationService.translateViaPivoting(
+          sourceModel,
+          targetModel,
+          messages,
+          options
+        );
+        resolve(result);
+      } catch (error) {
+        reject(
+          new Error(
+            `Pivoting translation failed: ${error.message || "Unknown error"}`
+          )
+        );
+      }
+    });
+  }
+
+  /**
+   * 处理翻译结果
+   * @param {any} responses
+   * @returns {string[]}
+   * @private
+   */
+  _processTranslationResults(responses) {
+    const results = [];
+    const responsesSize = responses.size();
+    results.length = responsesSize; // 预分配数组大小
+
+    for (let i = 0; i < responsesSize; i++) {
+      try {
+        results[i] = responses.get(i).getTranslatedText();
+      } catch (error) {
+        Logger.error(
+          "Engine",
+          `Failed to get translated text at index ${i}:`,
+          error
+        );
+        results[i] = "[Translation error]";
+      }
+    }
+
+    return results;
   }
 
   /**
    * 执行翻译的核心方法，被单文本和批量翻译共用
    *
-   * @param {string[]} input - 输入文本数组
+   * @param {string|string[]} input - 输入文本或文本数组
    * @param {boolean} isHTML - 是否为HTML内容
    * @returns {Promise<string[]|string>}
    */
-  async translate(input, isHTML) {
+  async translate(input, isHTML = false) {
+    // 增加翻译计数
+    this.translationCount++;
+
     // 将单个文本转换为数组处理
     const isTextArray = Array.isArray(input);
     const sourceTexts = isTextArray ? input : [input];
 
     let responses;
-    const { messages, options } = getTranslationArgs(
-      this.bergamot,
-      sourceTexts,
-      isHTML
-    );
+    let messages;
+    let options;
 
     try {
+      const translationArgs = getTranslationArgs(
+        this.bergamot,
+        sourceTexts,
+        isHTML
+      );
+      messages = translationArgs.messages;
+      options = translationArgs.options;
+
       if (messages.size() === 0) {
         return isTextArray ? this.emptyBatchResult : this.emptyResult;
       }
 
       const modelCount = this.languageTranslationModels.length;
+
       if (modelCount === 1) {
-        try {
-          responses = await new Promise((resolve, reject) => {
-            try {
-              const result = this.translationService.translate(
-                this.languageTranslationModels[0],
-                messages,
-                options
-              );
-              resolve(result);
-            } catch (error) {
-              reject(
-                new Error(
-                  `Translation failed: ${error.message || "Unknown error"}`
-                )
-              );
-            }
-          });
-        } catch (error) {
-          console.error("Translation error:", error);
-          throw new Error(`Failed to translate text: ${error.message}`);
-        }
+        responses = await this._translateWithSingleModel(
+          this.languageTranslationModels[0],
+          messages,
+          options
+        );
       } else if (modelCount === 2) {
-        try {
-          responses = await new Promise((resolve, reject) => {
-            try {
-              const result = this.translationService.translateViaPivoting(
-                this.languageTranslationModels[0],
-                this.languageTranslationModels[1],
-                messages,
-                options
-              );
-              resolve(result);
-            } catch (error) {
-              reject(
-                new Error(
-                  `Pivoting translation failed: ${error.message || "Unknown error"
-                  }`
-                )
-              );
-            }
-          });
-        } catch (error) {
-          console.error("Pivoting translation error:", error);
-          throw new Error(
-            `Failed to translate text via pivoting: ${error.message}`
-          );
-        }
+        responses = await this._translateViaPivoting(
+          this.languageTranslationModels[0],
+          this.languageTranslationModels[1],
+          messages,
+          options
+        );
       } else {
         throw new Error("Too many models provided to the translation engine.");
       }
 
       // 处理翻译结果
-      const results = [];
-      const responsesSize = responses.size();
-      results.length = responsesSize; // 预分配数组大小
-
-      for (let i = 0; i < responsesSize; i++) {
-        try {
-          results[i] = responses.get(i).getTranslatedText();
-        } catch (error) {
-          console.error(`Failed to get translated text at index ${i}:`, error);
-          results[i] = "[Translation error]";
-        }
-      }
-
+      const results = this._processTranslationResults(responses);
       return isTextArray ? results : results[0];
     } catch (error) {
-      console.error("Translation process failed:", error);
+      Logger.error("Engine", "Translation process failed:", error);
       throw error;
     } finally {
-      // 释放所有分配的内存
-      try {
-        messages?.delete();
-        options?.delete();
-        responses?.delete();
-      } catch (error) {
-        console.error("Failed to clean up memory:", error);
+      // 立即释放翻译相关的内存
+      this._cleanupTranslationMemory(messages, options, responses);
+
+      // 定期执行深度内存清理
+      if (this.shouldCleanupMemory()) {
+        // 使用setTimeout异步执行，避免阻塞翻译响应
+        setTimeout(() => {
+          this.forceWasmMemoryCleanup();
+        }, 0);
       }
+    }
+  }
+
+  /**
+   * 清理翻译相关内存
+   * @param {any} messages
+   * @param {any} options
+   * @param {any} responses
+   * @private
+   */
+  _cleanupTranslationMemory(messages, options, responses) {
+    try {
+      messages?.delete();
+      options?.delete();
+      responses?.delete();
+    } catch (error) {
+      Logger.error("Engine", "Failed to clean up translation memory:", error);
+    }
+  }
+
+  /**
+   * 销毁Engine实例，释放所有资源
+   */
+  destroy() {
+    try {
+      // 删除翻译模型
+      for (const model of this.languageTranslationModels) {
+        if (model && typeof model.delete === "function") {
+          model.delete();
+        }
+      }
+      this.languageTranslationModels = [];
+
+      // 删除翻译服务
+      if (
+        this.translationService &&
+        typeof this.translationService.delete === "function"
+      ) {
+        this.translationService.delete();
+      }
+
+      // 强制清理所有延迟删除的对象
+      this.forceWasmMemoryCleanup();
+
+      Logger.debug(
+        "Engine",
+        `Engine destroyed after ${this.translationCount} translations`
+      );
+    } catch (error) {
+      Logger.error("Engine", "Error destroying engine:", error);
     }
   }
 }
