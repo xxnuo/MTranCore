@@ -15,10 +15,37 @@ function log(...args) {
   }
 }
 
+// 全局engine引用，用于清理
+let globalEngine = null;
 
 // 捕获未处理的 Promise 拒绝
 process.on("unhandledRejection", (reason) => {
   console.error("Unhandled Rejection:", reason);
+});
+
+// 处理worker退出时的清理
+process.on("exit", () => {
+  if (globalEngine) {
+    try {
+      globalEngine.destroy();
+      globalEngine = null;
+    } catch (error) {
+      console.error("Error destroying engine on exit:", error);
+    }
+  }
+});
+
+// 处理SIGTERM信号
+process.on("SIGTERM", () => {
+  if (globalEngine) {
+    try {
+      globalEngine.destroy();
+      globalEngine = null;
+    } catch (error) {
+      console.error("Error destroying engine on SIGTERM:", error);
+    }
+  }
+  process.exit(0);
 });
 
 /**
@@ -57,6 +84,9 @@ async function handleInitializationMessage(data) {
       bergamot,
       modelPayloads
     );
+    
+    // 保存全局引用用于清理
+    globalEngine = engine;
 
     const endTime = performance.now();
     log(`Engine initialized in ${(endTime - startTime) / 1000} seconds`);

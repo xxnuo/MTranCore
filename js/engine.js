@@ -258,6 +258,14 @@ class Engine {
     this.bergamot = bergamot;
     /** @type {Bergamot["TranslationModel"][]} */
     this.languageTranslationModels = [];
+    /** @type {Object[]} */
+    this.allocatedMemoryBlocks = []; // 跟踪分配的内存块
+    /** @type {number} */
+    this.translationCount = 0; // 翻译计数
+    /** @type {number} */
+    this.lastMemoryCleanup = Date.now(); // 上次内存清理时间
+    /** @type {number} */
+    this.initialWasmMemorySize = bergamot.HEAP8 ? bergamot.HEAP8.length : 0;
 
     // 初始化翻译模型
     for (const translationModelPayload of translationModelPayloads) {
@@ -279,6 +287,53 @@ class Engine {
   }
 
   /**
+   * 获取当前WebAssembly内存使用情况
+   */
+  getWasmMemoryStats() {
+    const currentSize = this.bergamot.HEAP8 ? this.bergamot.HEAP8.length : 0;
+    const growth = currentSize - this.initialWasmMemorySize;
+    return {
+      currentSize: currentSize,
+      initialSize: this.initialWasmMemorySize,
+      growth: growth,
+      growthMB: (growth / 1024 / 1024).toFixed(2)
+    };
+  }
+
+  /**
+   * 强制执行WebAssembly内存清理
+   */
+  forceWasmMemoryCleanup() {
+    try {
+      // 强制执行延迟删除的对象
+      if (this.bergamot.flushPendingDeletes) {
+        this.bergamot.flushPendingDeletes();
+      }
+      
+      // 记录清理时间
+      this.lastMemoryCleanup = Date.now();
+      
+      if (Config.LOG_LEVEL === "Debug") {
+        const stats = this.getWasmMemoryStats();
+        console.log(`Engine memory cleanup - WASM size: ${stats.growthMB}MB growth`);
+      }
+    } catch (error) {
+      console.error("Failed to cleanup WASM memory:", error);
+    }
+  }
+
+  /**
+   * 检查是否需要进行内存清理
+   */
+  shouldCleanupMemory() {
+    const timeSinceLastCleanup = Date.now() - this.lastMemoryCleanup;
+    const translationsSinceCleanup = this.translationCount % 1000;
+    
+    // 每1000次翻译或每5分钟清理一次
+    return translationsSinceCleanup === 0 || timeSinceLastCleanup > 300000;
+  }
+
+  /**
    * 执行翻译的核心方法，被单文本和批量翻译共用
    *
    * @param {string[]} input - 输入文本数组
@@ -286,18 +341,26 @@ class Engine {
    * @returns {Promise<string[]|string>}
    */
   async translate(input, isHTML) {
+    // 增加翻译计数
+    this.translationCount++;
+    
     // 将单个文本转换为数组处理
     const isTextArray = Array.isArray(input);
     const sourceTexts = isTextArray ? input : [input];
 
     let responses;
-    const { messages, options } = getTranslationArgs(
-      this.bergamot,
-      sourceTexts,
-      isHTML
-    );
-
+    let messages;
+    let options;
+    
     try {
+      const translationArgs = getTranslationArgs(
+        this.bergamot,
+        sourceTexts,
+        isHTML
+      );
+      messages = translationArgs.messages;
+      options = translationArgs.options;
+
       if (messages.size() === 0) {
         return isTextArray ? this.emptyBatchResult : this.emptyResult;
       }
@@ -374,14 +437,51 @@ class Engine {
       console.error("Translation process failed:", error);
       throw error;
     } finally {
-      // 释放所有分配的内存
+      // 立即释放翻译相关的内存
       try {
         messages?.delete();
         options?.delete();
         responses?.delete();
       } catch (error) {
-        console.error("Failed to clean up memory:", error);
+        console.error("Failed to clean up translation memory:", error);
       }
+      
+      // 定期执行深度内存清理
+      if (this.shouldCleanupMemory()) {
+        // 使用setTimeout异步执行，避免阻塞翻译响应
+        setTimeout(() => {
+          this.forceWasmMemoryCleanup();
+        }, 0);
+      }
+    }
+  }
+
+  /**
+   * 销毁Engine实例，释放所有资源
+   */
+  destroy() {
+    try {
+      // 删除翻译模型
+      for (const model of this.languageTranslationModels) {
+        if (model && typeof model.delete === 'function') {
+          model.delete();
+        }
+      }
+      this.languageTranslationModels = [];
+      
+      // 删除翻译服务
+      if (this.translationService && typeof this.translationService.delete === 'function') {
+        this.translationService.delete();
+      }
+      
+      // 强制清理所有延迟删除的对象
+      this.forceWasmMemoryCleanup();
+      
+      if (Config.LOG_LEVEL === "Debug") {
+        console.log(`Engine destroyed after ${this.translationCount} translations`);
+      }
+    } catch (error) {
+      console.error("Error destroying engine:", error);
     }
   }
 }
