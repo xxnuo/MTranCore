@@ -867,8 +867,11 @@ class Translator {
       // 纯繁体转换
       texts = await this.performComplexCCTranslation(texts, translationPlan);
     } else if (translationPlan.pureCC && translationPlan.needPreProcess) {
-      // 简单繁简转换
+      // 简单繁简转换 - 预处理
       texts = await this.preprocessTexts(texts, translationPlan.preProcessType);
+    } else if (translationPlan.pureCC && translationPlan.needPostProcess) {
+      // 简单繁简转换 - 后处理（如 zh-Hans -> zh-Hant）
+      // 不需要在这里处理，交给后处理阶段
     } else if (fromLang !== toLang) {
       // 标准翻译
       const engine = await this.Preload(fromLang, toLang);
