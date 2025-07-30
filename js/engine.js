@@ -30,8 +30,11 @@ const MODEL_FILE_ALIGNMENTS = {
 const WHITESPACE_REGEX = /^(\s*)(.*?)(\s*)$/s; // 此正则表达式匹配文本前后的空白，以便保留它们
 const FULL_WIDTH_PUNCTUATION_LANGUAGE_TAGS = ["ja", "ko", "zh", ...Lang.MCC]; // 使用全角标点符号的语言列表
 const FULL_WIDTH_PUNCTUATION_REGEX = /([。！？])"/g; // 此正则表达式帮助对使用全角标点符号的语言进行句子分割
-const MEMORY_CLEANUP_INTERVAL = Config.CLEANUP_INTERVAL; // 每 x 次翻译清理一次内存
-const MEMORY_CLEANUP_TIME_THRESHOLD = Config.CLEANUP_TIME_THRESHOLD * 60 * 1000; // y 分钟内存清理时间阈值
+
+// 获取内存配置
+const memoryConfig = Config.getMemoryConfig();
+const MEMORY_CLEANUP_INTERVAL = memoryConfig.wasmCleanupInterval; // 每 x 次翻译清理一次内存
+const MEMORY_CLEANUP_TIME_THRESHOLD = memoryConfig.wasmCleanupTimeout * 60 * 1000; // y 分钟内存清理时间阈值
 
 /**
  * 在将文本发送到翻译引擎之前，执行必要的清理步骤

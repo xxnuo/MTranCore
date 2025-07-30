@@ -33,29 +33,48 @@ class Config {
 
   // === 内存管理配置 ===
   
-  // 是否启用模型内存自动释放功能，默认为 true
-  static AUTO_RELEASE =
-    process.env.MTRAN_AUTO_RELEASE?.toLowerCase() !== "false";
+  // 内存管理策略：conservative（保守）、balanced（平衡）、aggressive（积极）
+  static MEMORY_STRATEGY = process.env.MTRAN_MEMORY_STRATEGY || "balanced";
   
-  // 模型内存自动释放的时间间隔（分钟），默认为 30 分钟
-  static RELEASE_INTERVAL =
-    parseFloat(process.env.MTRAN_RELEASE_INTERVAL) || 30.0;
+  // 模型自动释放时间间隔（分钟），0表示禁用自动释放
+  static MODEL_IDLE_TIMEOUT = parseFloat(process.env.MTRAN_MODEL_IDLE_TIMEOUT) || 30.0;
   
-  // 内存检查间隔（毫秒），默认为 60000 毫秒（1分钟）
-  static MEMORY_CHECK_INTERVAL =
-    parseInt(process.env.MTRAN_MEMORY_CHECK_INTERVAL, 10) || 60000;
-  
-  // 超时重置阈值（毫秒），默认为 300000 毫秒（5分钟）
-  static TIMEOUT_RESET_THRESHOLD =
-    parseInt(process.env.MTRAN_TIMEOUT_RESET_THRESHOLD, 10) || 300000;
-  
-  // 清理内存的间隔（次），默认为 5000 次翻译
-  static CLEANUP_INTERVAL =
-    parseInt(process.env.MTRAN_CLEANUP_INTERVAL, 10) || 5000;
-  
-  // 清理内存的时间阈值（分钟），默认为 30 分钟
-  static CLEANUP_TIME_THRESHOLD =
-    parseFloat(process.env.MTRAN_CLEANUP_TIME_THRESHOLD) || 30.0;
+  // 获取内存配置（根据MEMORY_STRATEGY自动设置）
+  static getMemoryConfig() {
+    const strategies = {
+      conservative: {
+        modelIdleTimeout: 60.0,        // 1小时后释放模型
+        memoryCheckInterval: 300000,   // 5分钟检查一次
+        wasmCleanupInterval: 10000,    // 每10000次翻译清理
+        wasmCleanupTimeout: 60.0,      // 1小时清理一次WASM
+        timeoutResetThreshold: 600000, // 10分钟重置阈值
+      },
+      balanced: {
+        modelIdleTimeout: 30.0,        // 30分钟后释放模型
+        memoryCheckInterval: 60000,    // 1分钟检查一次
+        wasmCleanupInterval: 5000,     // 每5000次翻译清理
+        wasmCleanupTimeout: 30.0,      // 30分钟清理一次WASM
+        timeoutResetThreshold: 300000, // 5分钟重置阈值
+      },
+      aggressive: {
+        modelIdleTimeout: 10.0,        // 10分钟后释放模型
+        memoryCheckInterval: 30000,    // 30秒检查一次
+        wasmCleanupInterval: 1000,     // 每1000次翻译清理
+        wasmCleanupTimeout: 10.0,      // 10分钟清理一次WASM
+        timeoutResetThreshold: 120000, // 2分钟重置阈值
+      }
+    };
+    
+    const strategy = strategies[this.MEMORY_STRATEGY] || strategies.balanced;
+    
+    return {
+      modelIdleTimeout: this.MODEL_IDLE_TIMEOUT > 0 ? this.MODEL_IDLE_TIMEOUT : strategy.modelIdleTimeout,
+      memoryCheckInterval: strategy.memoryCheckInterval,
+      wasmCleanupInterval: strategy.wasmCleanupInterval,
+      wasmCleanupTimeout: strategy.wasmCleanupTimeout,
+      timeoutResetThreshold: strategy.timeoutResetThreshold,
+    };
+  }
 
   // === Worker 配置 ===
   
@@ -126,6 +145,8 @@ class Config {
    * @returns {Object} 配置摘要
    */
   static getSummary() {
+    const memoryConfig = this.getMemoryConfig();
+    
     return {
       // 基础配置
       offline: this.OFFLINE,
@@ -134,12 +155,9 @@ class Config {
       dataDir: this.DATA_DIR,
       
       // 内存管理
-      autoRelease: this.AUTO_RELEASE,
-      releaseInterval: this.RELEASE_INTERVAL,
-      memoryCheckInterval: this.MEMORY_CHECK_INTERVAL,
-      timeoutResetThreshold: this.TIMEOUT_RESET_THRESHOLD,
-      cleanupInterval: this.CLEANUP_INTERVAL,
-      cleanupTimeThreshold: this.CLEANUP_TIME_THRESHOLD,
+      memoryStrategy: this.MEMORY_STRATEGY,
+      modelIdleTimeout: this.MODEL_IDLE_TIMEOUT,
+      memoryConfig: memoryConfig,
       
       // Worker 配置
       workerInitTimeout: this.WORKER_INIT_TIMEOUT,
@@ -179,12 +197,13 @@ class Config {
       errors.push("MTRAN_WORKERS must be between 1 and 32");
     }
     
-    if (this.RELEASE_INTERVAL < 1) {
-      errors.push("MTRAN_RELEASE_INTERVAL must be greater than 1 minute");
+    const validStrategies = ["conservative", "balanced", "aggressive"];
+    if (!validStrategies.includes(this.MEMORY_STRATEGY)) {
+      errors.push(`MTRAN_MEMORY_STRATEGY must be one of: ${validStrategies.join(", ")}`);
     }
     
-    if (this.MEMORY_CHECK_INTERVAL < 10000) {
-      errors.push("MTRAN_MEMORY_CHECK_INTERVAL must be at least 10000ms");
+    if (this.MODEL_IDLE_TIMEOUT < 0) {
+      errors.push("MTRAN_MODEL_IDLE_TIMEOUT must be greater than or equal to 0");
     }
     
     if (this.WORKER_INIT_TIMEOUT < 30000) {

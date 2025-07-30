@@ -10,15 +10,16 @@ const Config = require("./config");
 const Logger = require("./logger");
 
 // 配置常量
-const ENGINE_CACHE_ENABLE = Config.AUTO_RELEASE;
-const ENGINE_CACHE_TIMEOUT_MINUTES = Config.RELEASE_INTERVAL;
+const memoryConfig = Config.getMemoryConfig();
+const ENGINE_CACHE_ENABLE = memoryConfig.modelIdleTimeout > 0;
+const ENGINE_CACHE_TIMEOUT_MINUTES = memoryConfig.modelIdleTimeout;
 const ENGINE_CACHE_TIMEOUT_MS =
   ENGINE_CACHE_ENABLE && ENGINE_CACHE_TIMEOUT_MINUTES > 0
     ? Math.round(ENGINE_CACHE_TIMEOUT_MINUTES * 60 * 1000)
     : Infinity;
 const WORKERS_PER_LANGUAGE_PAIR = Config.WORKERS;
-const MEMORY_CHECK_INTERVAL_MS = Config.MEMORY_CHECK_INTERVAL;
-const TIMEOUT_RESET_THRESHOLD_MS = Config.TIMEOUT_RESET_THRESHOLD;
+const MEMORY_CHECK_INTERVAL_MS = memoryConfig.memoryCheckInterval;
+const TIMEOUT_RESET_THRESHOLD_MS = memoryConfig.timeoutResetThreshold;
 const WORKER_INIT_TIMEOUT_MS = Config.WORKER_INIT_TIMEOUT;
 const MAX_DETECTION_LENGTH = Config.MAX_DETECTION_LENGTH;
 
