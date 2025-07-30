@@ -1,25 +1,25 @@
 #!/usr/bin/env node
 
 const Translator = require("./translator");
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
 
 // 版本信息
 const VERSION = "3.0.0";
 
 // 加载配置文件
 function loadConfig() {
-  const configDir = path.join(os.homedir(), '.config', 'mtran');
-  const configPath = path.join(configDir, 'cli.json');
+  const configDir = path.join(os.homedir(), ".config", "mtran");
+  const configPath = path.join(configDir, "cli.json");
   const defaultConfig = {
     inputLang: "auto",
-    outputLang: "zh-Hans"
+    outputLang: "zh-Hans",
   };
 
   try {
     if (fs.existsSync(configPath)) {
-      const configData = fs.readFileSync(configPath, 'utf8');
+      const configData = fs.readFileSync(configPath, "utf8");
       const userConfig = JSON.parse(configData);
       return { ...defaultConfig, ...userConfig };
     } else {
@@ -30,7 +30,11 @@ function loadConfig() {
           fs.mkdirSync(configDir, { recursive: true });
         }
         // 写入默认配置
-        fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 2), 'utf8');
+        fs.writeFileSync(
+          configPath,
+          JSON.stringify(defaultConfig, null, 2),
+          "utf8"
+        );
         // console.log(`已创建默认配置文件: ${configPath}`);
       } catch (createError) {
         console.error(`无法创建配置文件: ${createError.message}`);
@@ -54,7 +58,7 @@ function parseArgs() {
     modelDir: config.modelDir || null, // modelDir 作为隐藏参数，仅当用户在配置中指定时使用
     text: "",
     showVersion: false,
-    showHelp: false
+    showHelp: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -136,11 +140,12 @@ async function main() {
     console.log(result);
     await Translator.Shutdown();
   } catch (error) {
+    console.error(`发生错误: ${error.message}`);
     process.exit(1);
   }
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error(`发生错误: ${error.message}`);
   process.exit(1);
 });
