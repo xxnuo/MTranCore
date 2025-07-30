@@ -7,7 +7,18 @@ const LOG_LEVELS = {
   ERROR: 0,
   WARN: 1,
   INFO: 2,
-  DEBUG: 3
+  DEBUG: 3,
+};
+
+/**
+ * 日志颜色配置
+ */
+const LOG_COLORS = {
+  ERROR: "\x1b[31m", // 红色
+  WARN: "\x1b[33m", // 黄色
+  INFO: "\x1b[36m", // 青色
+  DEBUG: "\x1b[90m", // 灰色
+  RESET: "\x1b[0m", // 重置颜色
 };
 
 /**
@@ -21,11 +32,25 @@ function getLogLevelValue(level) {
 }
 
 /**
+ * 检查是否在终端环境中（支持颜色输出）
+ * @returns {boolean} 是否支持颜色
+ */
+function supportsColor() {
+  return process.stdout.isTTY && process.env.NODE_ENV !== "test";
+}
+
+/**
  * 统一的日志记录器
  */
 class Logger {
   // 缓存当前日志级别，避免重复计算
   static _currentLogLevel = getLogLevelValue(Config.LOG_LEVEL);
+
+  // 性能计时器缓存
+  static _timers = new Map();
+
+  // 是否支持颜色输出
+  static _colorSupport = supportsColor();
 
   /**
    * 更新日志级别缓存
@@ -45,6 +70,15 @@ class Logger {
   }
 
   /**
+   * 获取格式化的时间戳
+   * @returns {string} 格式化的时间戳
+   * @private
+   */
+  static _getTimestamp() {
+    return new Date().toISOString();
+  }
+
+  /**
    * 格式化日志前缀
    * @param {string} level - 日志级别名称
    * @param {string} module - 模块名称
@@ -52,8 +86,27 @@ class Logger {
    * @private
    */
   static _formatPrefix(level, module) {
-    const timestamp = new Date().toISOString();
-    return `[${timestamp}] [${level} ${module}]:`;
+    const timestamp = Logger._getTimestamp();
+    const color = Logger._colorSupport ? LOG_COLORS[level] : "";
+    const reset = Logger._colorSupport ? LOG_COLORS.RESET : "";
+
+    return `${color}[${timestamp}] [${level} ${module}]:${reset}`;
+  }
+
+  /**
+   * 通用日志输出方法
+   * @param {string} level - 日志级别
+   * @param {number} levelValue - 日志级别数值
+   * @param {Function} logFn - 日志输出函数
+   * @param {string} module - 模块名称
+   * @param {...any} args - 日志参数
+   * @private
+   */
+  static _log(level, levelValue, logFn, module, ...args) {
+    if (Logger._shouldLog(levelValue)) {
+      const prefix = Logger._formatPrefix(level, module);
+      logFn(prefix, ...args);
+    }
   }
 
   /**
@@ -62,9 +115,16 @@ class Logger {
    * @param {...any} args - 日志参数
    */
   static log(module, ...args) {
-    if (Logger._shouldLog(LOG_LEVELS.INFO)) {
-      console.log(Logger._formatPrefix("INFO", module), ...args);
-    }
+    Logger._log("INFO", LOG_LEVELS.INFO, console.log, module, ...args);
+  }
+
+  /**
+   * 信息日志输出 (INFO级别) - log方法的别名
+   * @param {string} module - 模块名称
+   * @param {...any} args - 日志参数
+   */
+  static info(module, ...args) {
+    Logger.log(module, ...args);
   }
 
   /**
@@ -73,9 +133,7 @@ class Logger {
    * @param {...any} args - 日志参数
    */
   static debug(module, ...args) {
-    if (Logger._shouldLog(LOG_LEVELS.DEBUG)) {
-      console.log(Logger._formatPrefix("DEBUG", module), ...args);
-    }
+    Logger._log("DEBUG", LOG_LEVELS.DEBUG, console.log, module, ...args);
   }
 
   /**
@@ -84,9 +142,7 @@ class Logger {
    * @param {...any} args - 日志参数
    */
   static warn(module, ...args) {
-    if (Logger._shouldLog(LOG_LEVELS.WARN)) {
-      console.warn(Logger._formatPrefix("WARN", module), ...args);
-    }
+    Logger._log("WARN", LOG_LEVELS.WARN, console.warn, module, ...args);
   }
 
   /**
@@ -95,7 +151,8 @@ class Logger {
    * @param {...any} args - 日志参数
    */
   static error(module, ...args) {
-    console.error(Logger._formatPrefix("ERROR", module), ...args);
+    const prefix = Logger._formatPrefix("ERROR", module);
+    console.error(prefix, ...args);
   }
 
   /**
@@ -106,7 +163,8 @@ class Logger {
   static timeStart(module, label) {
     if (Logger._shouldLog(LOG_LEVELS.DEBUG)) {
       const key = `${module}:${label}`;
-      console.time(key);
+      Logger._timers.set(key, process.hrtime.bigint());
+      Logger.debug(module, `开始计时: ${label}`);
     }
   }
 
@@ -118,7 +176,16 @@ class Logger {
   static timeEnd(module, label) {
     if (Logger._shouldLog(LOG_LEVELS.DEBUG)) {
       const key = `${module}:${label}`;
-      console.timeEnd(key);
+      const startTime = Logger._timers.get(key);
+
+      if (startTime) {
+        const endTime = process.hrtime.bigint();
+        const duration = Number(endTime - startTime) / 1000000; // 转换为毫秒
+        Logger._timers.delete(key);
+        Logger.debug(module, `计时结束: ${label} - ${duration.toFixed(2)}ms`);
+      } else {
+        Logger.warn(module, `未找到计时器: ${label}`);
+      }
     }
   }
 
@@ -129,8 +196,20 @@ class Logger {
    * @param {...any} args - 日志参数
    */
   static logIf(condition, module, ...args) {
-    if (condition && Logger._shouldLog(LOG_LEVELS.INFO)) {
-      console.log(Logger._formatPrefix("INFO", module), ...args);
+    if (condition) {
+      Logger.log(module, ...args);
+    }
+  }
+
+  /**
+   * 条件调试日志输出
+   * @param {boolean} condition - 条件
+   * @param {string} module - 模块名称
+   * @param {...any} args - 日志参数
+   */
+  static debugIf(condition, module, ...args) {
+    if (condition) {
+      Logger.debug(module, ...args);
     }
   }
 
@@ -141,8 +220,74 @@ class Logger {
   static getCurrentLogLevel() {
     const levelNames = Object.keys(LOG_LEVELS);
     const currentLevel = Logger._currentLogLevel;
-    return levelNames.find(name => LOG_LEVELS[name] === currentLevel) || "ERROR";
+    return (
+      levelNames.find((name) => LOG_LEVELS[name] === currentLevel) || "ERROR"
+    );
+  }
+
+  /**
+   * 设置日志级别
+   * @param {string} level - 新的日志级别
+   */
+  static setLogLevel(level) {
+    const newLevel = getLogLevelValue(level);
+    if (newLevel !== undefined) {
+      Logger._currentLogLevel = newLevel;
+      Logger.info("Logger", `日志级别已更新为: ${level.toUpperCase()}`);
+    } else {
+      Logger.warn("Logger", `无效的日志级别: ${level}`);
+    }
+  }
+
+  /**
+   * 清理所有性能计时器
+   */
+  static clearTimers() {
+    Logger._timers.clear();
+    Logger.debug("Logger", "已清理所有性能计时器");
+  }
+
+  /**
+   * 获取活跃的计时器数量
+   * @returns {number} 活跃计时器数量
+   */
+  static getActiveTimersCount() {
+    return Logger._timers.size;
+  }
+
+  /**
+   * 输出分组开始标记（仅在DEBUG级别）
+   * @param {string} module - 模块名称
+   * @param {string} groupName - 分组名称
+   */
+  static groupStart(module, groupName) {
+    Logger.debug(module, `开始分组: ${groupName}`);
+  }
+
+  /**
+   * 输出分组结束标记（仅在DEBUG级别）
+   * @param {string} module - 模块名称
+   * @param {string} groupName - 分组名称
+   */
+  static groupEnd(module, groupName) {
+    Logger.debug(module, `结束分组: ${groupName}`);
+  }
+
+  /**
+   * 输出表格数据（仅在DEBUG级别）
+   * @param {string} module - 模块名称
+   * @param {string} title - 表格标题
+   * @param {Array|Object} data - 表格数据
+   */
+  static table(module, title, data) {
+    if (Logger._shouldLog(LOG_LEVELS.DEBUG)) {
+      Logger.debug(module, `表格: ${title}`);
+      console.table(data);
+    }
   }
 }
 
-module.exports = Logger; 
+// 导出日志级别常量，供外部使用
+Logger.LOG_LEVELS = LOG_LEVELS;
+
+module.exports = Logger;

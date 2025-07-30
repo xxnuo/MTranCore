@@ -286,8 +286,10 @@ class Translator {
 
     // 只在引擎刚创建或长时间未使用时重置超时计时器
     // 避免在高频使用时不断重置计时器
-    const timeSinceLastReset = Date.now() - (cachedEngine.lastTimeoutReset || 0);
-    const shouldResetTimeout = !cachedEngine.timeoutId || timeSinceLastReset > 300000; // 5分钟
+    const timeSinceLastReset =
+      Date.now() - (cachedEngine.lastTimeoutReset || 0);
+    const shouldResetTimeout =
+      !cachedEngine.timeoutId || timeSinceLastReset > 300000; // 5分钟
 
     if (shouldResetTimeout) {
       // 清除现有的超时计时器
@@ -301,7 +303,7 @@ class Translator {
         cachedEngine.timeoutId = setTimeout(() => {
           this.removeEngine(languagePairKey);
         }, ENGINE_CACHE_TIMEOUT_MS);
-        
+
         // 记录超时计时器重置时间
         cachedEngine.lastTimeoutReset = Date.now();
       }
