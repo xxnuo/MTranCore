@@ -10,6 +10,10 @@
 - `MTRAN_RELEASE_INTERVAL` 模型自动释放时间间隔，单位为分钟。默认值为 30 分钟。
 - `MTRAN_CLEANUP_INTERVAL` 内存清理间隔，单位为次。默认值为 5000 次。
 - `MTRAN_CLEANUP_TIME_THRESHOLD` 内存清理时间阈值，单位为分钟。默认值为 30 分钟。
+- `MTRAN_MEMORY_CHECK_INTERVAL` 内存检查间隔，单位为毫秒。默认值为 60000 毫秒（1分钟）。
+- `MTRAN_TIMEOUT_RESET_THRESHOLD` 超时重置阈值，单位为毫秒。默认值为 300000 毫秒（5分钟）。
+- `MTRAN_WORKER_INIT_TIMEOUT` Worker 初始化超时时间，单位为毫秒。默认值为 600000 毫秒（600秒）。
+- `MTRAN_MAX_DETECTION_LENGTH` 最大检测长度，单位为字符。默认值为 64。
 
 ## 默认模型存储路径
 
