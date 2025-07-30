@@ -29,6 +29,12 @@ class Config {
   // 模型内存自动释放的时间间隔（分钟），默认为 30 分钟
   static RELEASE_INTERVAL =
     parseFloat(process.env.MTRAN_RELEASE_INTERVAL) || 30.0;
+  // 清理内存的间隔（次），默认为 5000 次
+  static CLEANUP_INTERVAL =
+    parseInt(process.env.MTRAN_CLEANUP_INTERVAL) || 5000;
+  // 清理内存的时间阈值（分钟），默认为 30 分钟
+  static CLEANUP_TIME_THRESHOLD =
+    parseFloat(process.env.MTRAN_CLEANUP_TIME_THRESHOLD) || 30.0;
 }
 
 module.exports = Config;

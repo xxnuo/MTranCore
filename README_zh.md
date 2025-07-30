@@ -8,6 +8,8 @@
 - `MTRAN_DATA_DIR` 数据存储目录，默认为 ~/.cache/mtran。可以清空，文件会在下次翻译时重新下载。
 - `MTRAN_AUTO_RELEASE` 是否启用模型自动释放功能。默认值为 true。
 - `MTRAN_RELEASE_INTERVAL` 模型自动释放时间间隔，单位为分钟。默认值为 30 分钟。
+- `MTRAN_CLEANUP_INTERVAL` 内存清理间隔，单位为次。默认值为 5000 次。
+- `MTRAN_CLEANUP_TIME_THRESHOLD` 内存清理时间阈值，单位为分钟。默认值为 30 分钟。
 
 ## 默认模型存储路径
 

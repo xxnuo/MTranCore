@@ -8,6 +8,8 @@
 - `MTRAN_DATA_DIR` Data storage directory, default is ~/.cache/mtran. Can be cleared, files will be re-downloaded on next translation.
 - `MTRAN_AUTO_RELEASE` Whether to enable model auto-release feature. Default value is true.
 - `MTRAN_RELEASE_INTERVAL` Model auto-release interval, in minutes. Default value is 30 minutes.
+- `MTRAN_CLEANUP_INTERVAL` Memory cleanup interval, in times. Default value is 5000 times.
+- `MTRAN_CLEANUP_TIME_THRESHOLD` Memory cleanup time threshold, in minutes. Default value is 30 minutes.
 
 ## Default Model Storage Path
 
