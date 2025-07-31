@@ -303,6 +303,8 @@ class TranslationWorker {
     this.engine = null;
     this.workQueue = new WorkQueue();
     this.isInitialized = false;
+    this.taskCount = 0; // 任务计数器
+    this.shouldRestart = false; // 重启标志
     this.setupMessageHandlers();
   }
 
@@ -452,10 +454,19 @@ class TranslationWorker {
       // 恢复空白字符
       const targetText = whitespaceBefore + result[0] + whitespaceAfter;
 
+      // 增加任务计数
+      this.taskCount++;
+
+      // 检查是否需要重启
+      if (this.taskCount >= Config.WORKER_RESTART_TASK_COUNT) {
+        this.shouldRestart = true;
+        log(`Worker has processed ${this.taskCount} tasks, will restart after current tasks complete`);
+      }
+
       logDebug(
         `Translation ${translationId} completed in ${inferenceMilliseconds.toFixed(
           2
-        )}ms`
+        )}ms (task count: ${this.taskCount})`
       );
 
       // 返回结果
@@ -465,7 +476,15 @@ class TranslationWorker {
         inferenceMilliseconds,
         translationId,
         messageId,
+        shouldRestart: this.shouldRestart, // 通知主线程是否需要重启
       });
+
+      // 如果需要重启且队列为空，则退出进程
+      if (this.shouldRestart && this.workQueue.getStats().size === 0) {
+        log(`Worker restarting after ${this.taskCount} tasks`);
+        cleanupEngine();
+        process.exit(0);
+      }
     } catch (error) {
       logError(`Translation ${translationId} error:`, error);
       parentPort.postMessage({

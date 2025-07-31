@@ -31,11 +31,6 @@ const WHITESPACE_REGEX = /^(\s*)(.*?)(\s*)$/s; // 此正则表达式匹配文本
 const FULL_WIDTH_PUNCTUATION_LANGUAGE_TAGS = ["ja", "ko", "zh", ...Lang.MCC]; // 使用全角标点符号的语言列表
 const FULL_WIDTH_PUNCTUATION_REGEX = /([。！？])"/g; // 此正则表达式帮助对使用全角标点符号的语言进行句子分割
 
-// 获取内存配置
-const memoryConfig = Config.getMemoryConfig();
-const MEMORY_CLEANUP_INTERVAL = memoryConfig.wasmCleanupInterval; // 每 x 次翻译清理一次内存
-const MEMORY_CLEANUP_TIME_THRESHOLD = memoryConfig.wasmCleanupTimeout * 60 * 1000; // y 分钟内存清理时间阈值
-
 /**
  * 在将文本发送到翻译引擎之前，执行必要的清理步骤
  *
@@ -253,119 +248,33 @@ class Engine {
    * @param {Array<TranslationModelPayload>} translationModelPayloads
    * @private
    */
-  constructor(
-    sourceLanguage,
-    targetLanguage,
-    bergamot,
-    translationModelPayloads
-  ) {
-    /** @type {string} */
+  constructor(sourceLanguage, targetLanguage, bergamot, translationModelPayloads) {
     this.sourceLanguage = sourceLanguage;
-    /** @type {string} */
     this.targetLanguage = targetLanguage;
-    /** @type {Bergamot} */
     this.bergamot = bergamot;
-    /** @type {Bergamot["TranslationModel"][]} */
     this.languageTranslationModels = [];
-    /** @type {Object[]} */
-    this.allocatedMemoryBlocks = []; // 跟踪分配的内存块
-    /** @type {number} */
-    this.translationCount = 0; // 翻译计数
-    /** @type {number} */
-    this.lastMemoryCleanup = Date.now(); // 上次内存清理时间
-    /** @type {number} */
-    this.initialWasmMemorySize = bergamot.HEAP8 ? bergamot.HEAP8.length : 0;
+    this.translationService = null;
+    this.translationCount = 0;
 
-    // 初始化翻译模型
-    this._initializeTranslationModels(translationModelPayloads);
+    // 简化的内存管理
+    this.lastUsedTime = Date.now();
 
-    /** @type {Bergamot["BlockingService"]} */
-    this.translationService = new bergamot.BlockingService({
-      cacheSize: 0, // 这里禁用缓存，交由上层翻译器负责缓存
+    // 初始化翻译服务
+    this.translationService = new this.bergamot.BlockingService({
+      cacheSize: 20000,
     });
 
-    // 预创建常用的空结果对象，避免在空输入情况下创建新对象
-    this.emptyBatchResult = [];
+    // 加载翻译模型
+    for (const modelPayload of translationModelPayloads) {
+      const translationModel = this.translationService.loadModel(modelPayload);
+      this.languageTranslationModels.push(translationModel);
+    }
+
+    // 预分配结果数组
     this.emptyResult = "";
+    this.emptyBatchResult = [];
 
-    Logger.debug(
-      "Engine",
-      `Engine initialized for ${sourceLanguage} -> ${targetLanguage}`
-    );
-  }
-
-  /**
-   * 初始化翻译模型
-   * @param {Array<TranslationModelPayload>} translationModelPayloads
-   * @private
-   */
-  _initializeTranslationModels(translationModelPayloads) {
-    try {
-      for (const translationModelPayload of translationModelPayloads) {
-        const model = constructSingleTranslationModel(
-          this.bergamot,
-          translationModelPayload
-        );
-        this.languageTranslationModels.push(model);
-      }
-    } catch (error) {
-      Logger.error("Engine", "Failed to initialize translation models:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * 获取当前WebAssembly内存使用情况
-   * @returns {{currentSize: number, initialSize: number, growth: number, growthMB: string}}
-   */
-  getWasmMemoryStats() {
-    const currentSize = this.bergamot.HEAP8 ? this.bergamot.HEAP8.length : 0;
-    const growth = currentSize - this.initialWasmMemorySize;
-    return {
-      currentSize: currentSize,
-      initialSize: this.initialWasmMemorySize,
-      growth: growth,
-      growthMB: (growth / 1024 / 1024).toFixed(2),
-    };
-  }
-
-  /**
-   * 强制执行WebAssembly内存清理
-   */
-  forceWasmMemoryCleanup() {
-    try {
-      // 强制执行延迟删除的对象
-      if (this.bergamot.flushPendingDeletes) {
-        this.bergamot.flushPendingDeletes();
-      }
-
-      // 记录清理时间
-      this.lastMemoryCleanup = Date.now();
-
-      const stats = this.getWasmMemoryStats();
-      Logger.debug(
-        "Engine",
-        `Memory cleanup completed - WASM size: ${stats.growthMB}MB growth`
-      );
-    } catch (error) {
-      Logger.error("Engine", "Failed to cleanup WASM memory:", error);
-    }
-  }
-
-  /**
-   * 检查是否需要进行内存清理
-   * @returns {boolean}
-   */
-  shouldCleanupMemory() {
-    const timeSinceLastCleanup = Date.now() - this.lastMemoryCleanup;
-    const translationsSinceCleanup =
-      this.translationCount % MEMORY_CLEANUP_INTERVAL;
-
-    // 每1000次翻译或每5分钟清理一次
-    return (
-      translationsSinceCleanup === 0 ||
-      timeSinceLastCleanup > MEMORY_CLEANUP_TIME_THRESHOLD
-    );
+    Logger.debug("Engine", `Engine initialized: ${sourceLanguage} -> ${targetLanguage}`);
   }
 
   /**
@@ -457,8 +366,9 @@ class Engine {
    * @returns {Promise<string[]|string>}
    */
   async translate(input, isHTML = false) {
-    // 增加翻译计数
+    // 增加翻译计数和更新使用时间
     this.translationCount++;
+    this.lastUsedTime = Date.now();
 
     // 将单个文本转换为数组处理
     const isTextArray = Array.isArray(input);
@@ -507,16 +417,8 @@ class Engine {
       Logger.error("Engine", "Translation process failed:", error);
       throw error;
     } finally {
-      // 立即释放翻译相关的内存
+      // 只进行基本的翻译内存清理
       this._cleanupTranslationMemory(messages, options, responses);
-
-      // 定期执行深度内存清理
-      if (this.shouldCleanupMemory()) {
-        // 使用setTimeout异步执行，避免阻塞翻译响应
-        setTimeout(() => {
-          this.forceWasmMemoryCleanup();
-        }, 0);
-      }
     }
   }
 
@@ -535,6 +437,19 @@ class Engine {
     } catch (error) {
       Logger.error("Engine", "Failed to clean up translation memory:", error);
     }
+  }
+
+  /**
+   * 获取引擎统计信息
+   * @returns {Object} 统计信息
+   */
+  getStats() {
+    return {
+      translationCount: this.translationCount,
+      lastUsedTime: this.lastUsedTime,
+      sourceLanguage: this.sourceLanguage,
+      targetLanguage: this.targetLanguage,
+    };
   }
 
   /**
@@ -557,9 +472,6 @@ class Engine {
       ) {
         this.translationService.delete();
       }
-
-      // 强制清理所有延迟删除的对象
-      this.forceWasmMemoryCleanup();
 
       Logger.debug(
         "Engine",

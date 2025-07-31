@@ -31,50 +31,16 @@ class Config {
     process.env.MTRAN_DOWNLOADER_UA ||
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:142.0) Gecko/20100101 Firefox/142.0a1";
 
-  // === 内存管理配置 ===
+  // === 简化的内存管理配置 ===
   
-  // 内存管理策略：conservative（保守）、balanced（平衡）、aggressive（积极）
-  static MEMORY_STRATEGY = process.env.MTRAN_MEMORY_STRATEGY || "balanced";
-  
-  // 模型自动释放时间间隔（分钟），0表示禁用自动释放
+  // 模型自动释放时间间隔（分钟），0表示禁用自动释放，默认30分钟
   static MODEL_IDLE_TIMEOUT = parseFloat(process.env.MTRAN_MODEL_IDLE_TIMEOUT) || 30.0;
   
-  // 获取内存配置（根据MEMORY_STRATEGY自动设置）
-  static getMemoryConfig() {
-    const strategies = {
-      conservative: {
-        modelIdleTimeout: 60.0,        // 1小时后释放模型
-        memoryCheckInterval: 300000,   // 5分钟检查一次
-        wasmCleanupInterval: 10000,    // 每10000次翻译清理
-        wasmCleanupTimeout: 60.0,      // 1小时清理一次WASM
-        timeoutResetThreshold: 600000, // 10分钟重置阈值
-      },
-      balanced: {
-        modelIdleTimeout: 30.0,        // 30分钟后释放模型
-        memoryCheckInterval: 60000,    // 1分钟检查一次
-        wasmCleanupInterval: 5000,     // 每5000次翻译清理
-        wasmCleanupTimeout: 30.0,      // 30分钟清理一次WASM
-        timeoutResetThreshold: 300000, // 5分钟重置阈值
-      },
-      aggressive: {
-        modelIdleTimeout: 10.0,        // 10分钟后释放模型
-        memoryCheckInterval: 30000,    // 30秒检查一次
-        wasmCleanupInterval: 1000,     // 每1000次翻译清理
-        wasmCleanupTimeout: 10.0,      // 10分钟清理一次WASM
-        timeoutResetThreshold: 120000, // 2分钟重置阈值
-      }
-    };
-    
-    const strategy = strategies[this.MEMORY_STRATEGY] || strategies.balanced;
-    
-    return {
-      modelIdleTimeout: this.MODEL_IDLE_TIMEOUT > 0 ? this.MODEL_IDLE_TIMEOUT : strategy.modelIdleTimeout,
-      memoryCheckInterval: strategy.memoryCheckInterval,
-      wasmCleanupInterval: strategy.wasmCleanupInterval,
-      wasmCleanupTimeout: strategy.wasmCleanupTimeout,
-      timeoutResetThreshold: strategy.timeoutResetThreshold,
-    };
-  }
+  // Worker重启任务数量阈值，默认1000次翻译后重启Worker
+  static WORKER_RESTART_TASK_COUNT = parseInt(process.env.MTRAN_WORKER_RESTART_TASK_COUNT, 10) || 1000;
+  
+  // 内存检查间隔（毫秒），默认60秒检查一次
+  static MEMORY_CHECK_INTERVAL = parseInt(process.env.MTRAN_MEMORY_CHECK_INTERVAL, 10) || 60000;
 
   // === Worker 配置 ===
   
@@ -145,8 +111,6 @@ class Config {
    * @returns {Object} 配置摘要
    */
   static getSummary() {
-    const memoryConfig = this.getMemoryConfig();
-    
     return {
       // 基础配置
       offline: this.OFFLINE,
@@ -154,10 +118,10 @@ class Config {
       logLevel: this.LOG_LEVEL,
       dataDir: this.DATA_DIR,
       
-      // 内存管理
-      memoryStrategy: this.MEMORY_STRATEGY,
+      // 简化的内存管理
       modelIdleTimeout: this.MODEL_IDLE_TIMEOUT,
-      memoryConfig: memoryConfig,
+      workerRestartTaskCount: this.WORKER_RESTART_TASK_COUNT,
+      memoryCheckInterval: this.MEMORY_CHECK_INTERVAL,
       
       // Worker 配置
       workerInitTimeout: this.WORKER_INIT_TIMEOUT,
@@ -197,13 +161,16 @@ class Config {
       errors.push("MTRAN_WORKERS must be between 1 and 32");
     }
     
-    const validStrategies = ["conservative", "balanced", "aggressive"];
-    if (!validStrategies.includes(this.MEMORY_STRATEGY)) {
-      errors.push(`MTRAN_MEMORY_STRATEGY must be one of: ${validStrategies.join(", ")}`);
-    }
-    
     if (this.MODEL_IDLE_TIMEOUT < 0) {
       errors.push("MTRAN_MODEL_IDLE_TIMEOUT must be greater than or equal to 0");
+    }
+    
+    if (this.WORKER_RESTART_TASK_COUNT < 100 || this.WORKER_RESTART_TASK_COUNT > 10000) {
+      errors.push("MTRAN_WORKER_RESTART_TASK_COUNT must be between 100 and 10000");
+    }
+    
+    if (this.MEMORY_CHECK_INTERVAL < 10000) {
+      errors.push("MTRAN_MEMORY_CHECK_INTERVAL must be at least 10000ms");
     }
     
     if (this.WORKER_INIT_TIMEOUT < 30000) {

@@ -8,12 +8,10 @@
 - `MTRAN_LOG_LEVEL` 日志级别，可选项：Error、Warn、Info、Debug
 - `MTRAN_DATA_DIR` 数据存储目录，默认为 ~/.cache/mtran。可以清空，文件会在下次翻译时重新下载。
 
-### 内存管理配置
-- `MTRAN_MEMORY_STRATEGY` 内存管理策略，可选项：
-  - `conservative`（保守）：更快的性能，但占用更多内存
-  - `balanced`（平衡，默认）：在内存使用和性能之间取得平衡
-  - `aggressive`（积极）：内存占用更少，但可能影响性能
+### 简化的内存管理配置
 - `MTRAN_MODEL_IDLE_TIMEOUT` 模型空闲超时时间（分钟）。模型在此时间内未使用将被自动释放。设置为 0 禁用自动释放。默认值为 30 分钟。
+- `MTRAN_WORKER_RESTART_TASK_COUNT` Worker重启任务数量阈值。Worker处理此数量的任务后会自动重启以释放内存。默认值为 1000。
+- `MTRAN_MEMORY_CHECK_INTERVAL` 内存检查间隔（毫秒）。系统检查和释放未使用模型的频率。默认值为 60000 毫秒（1分钟）。
 
 ### 其他配置
 - `MTRAN_WORKER_INIT_TIMEOUT` Worker 初始化超时时间，单位为毫秒。默认值为 600000 毫秒（10分钟）。
@@ -21,21 +19,25 @@
 
 ## 内存管理策略说明
 
-| 策略 | 模型释放时间 | 内存检查频率 | WASM清理频率 | 适用场景 |
-|------|-------------|-------------|-------------|----------|
-| conservative | 60分钟 | 5分钟 | 10000次翻译 | 高频使用，内存充足 |
-| balanced | 30分钟 | 1分钟 | 5000次翻译 | 一般使用场景（默认） |
-| aggressive | 10分钟 | 30秒 | 1000次翻译 | 内存受限环境，偶尔使用 |
+新的简化内存管理策略：
+
+| 特性 | 说明 | 默认值 |
+|------|------|--------|
+| 模型释放 | 按未使用时间自动释放模型 | 30分钟 |
+| Worker重启 | 按任务量重启Worker，保证队列不中断 | 1000次任务 |
+| 内存检查 | 定期检查和释放未使用的模型 | 每分钟 |
 
 ## 使用示例
 
 ```bash
-# 使用保守策略，适合内存受限环境
-export MTRAN_MEMORY_STRATEGY=conservative
+# 设置模型10分钟后自动释放
+export MTRAN_MODEL_IDLE_TIMEOUT=10
 
-# 使用积极策略，5分钟后释放模型
-export MTRAN_MEMORY_STRATEGY=aggressive
-export MTRAN_MODEL_IDLE_TIMEOUT=5
+# 设置Worker每500次任务后重启
+export MTRAN_WORKER_RESTART_TASK_COUNT=500
+
+# 设置每30秒检查一次内存
+export MTRAN_MEMORY_CHECK_INTERVAL=30000
 
 # 禁用自动释放，适合服务器应用
 export MTRAN_MODEL_IDLE_TIMEOUT=0

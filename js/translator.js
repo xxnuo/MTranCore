@@ -9,17 +9,14 @@ const { MESSAGE_TYPES } = require("./message");
 const Config = require("./config");
 const Logger = require("./logger");
 
-// 配置常量
-const memoryConfig = Config.getMemoryConfig();
-const ENGINE_CACHE_ENABLE = memoryConfig.modelIdleTimeout > 0;
-const ENGINE_CACHE_TIMEOUT_MINUTES = memoryConfig.modelIdleTimeout;
-const ENGINE_CACHE_TIMEOUT_MS =
-  ENGINE_CACHE_ENABLE && ENGINE_CACHE_TIMEOUT_MINUTES > 0
-    ? Math.round(ENGINE_CACHE_TIMEOUT_MINUTES * 60 * 1000)
-    : Infinity;
+// 简化的配置常量
+const ENGINE_CACHE_ENABLE = Config.MODEL_IDLE_TIMEOUT > 0;
+const ENGINE_CACHE_TIMEOUT_MINUTES = Config.MODEL_IDLE_TIMEOUT;
+const ENGINE_CACHE_TIMEOUT_MS = ENGINE_CACHE_ENABLE && ENGINE_CACHE_TIMEOUT_MINUTES > 0
+  ? Math.round(ENGINE_CACHE_TIMEOUT_MINUTES * 60 * 1000)
+  : Infinity;
 const WORKERS_PER_LANGUAGE_PAIR = Config.WORKERS;
-const MEMORY_CHECK_INTERVAL_MS = memoryConfig.memoryCheckInterval;
-const TIMEOUT_RESET_THRESHOLD_MS = memoryConfig.timeoutResetThreshold;
+const MEMORY_CHECK_INTERVAL_MS = Config.MEMORY_CHECK_INTERVAL;
 const WORKER_INIT_TIMEOUT_MS = Config.WORKER_INIT_TIMEOUT;
 const MAX_DETECTION_LENGTH = Config.MAX_DETECTION_LENGTH;
 
@@ -35,7 +32,6 @@ class Translator {
   static #messageId = 0;
   static #pendingMessages = new Map();
   static #memoryReleaseTimer = null;
-  static #models = null;
 
   /**
    * 获取支持的语言列表
@@ -231,7 +227,7 @@ class Translator {
     await this.loadModels(fromLang, toLang, needMiddle);
 
     // 准备模型数据
-    const modelPayloads = this.prepareModelPayloads(fromLang, toLang, needMiddle);
+    const modelPayloads = await this.prepareModelPayloads(fromLang, toLang, needMiddle);
 
     // 并行创建workers
     const workerPromises = Array.from({ length: WORKERS_PER_LANGUAGE_PAIR }, () =>
@@ -251,14 +247,16 @@ class Translator {
    * @param {boolean} needMiddle - 是否需要中间语言
    * @returns {Array} 模型载荷数组
    */
-  static prepareModelPayloads(fromLang, toLang, needMiddle) {
+  static async prepareModelPayloads(fromLang, toLang, needMiddle) {
     if (needMiddle) {
-      return [
-        this.#models[`${fromLang}_en`],
-        this.#models[`en_${toLang}`],
-      ];
+      const [payload1, payload2] = await Promise.all([
+        Models.getModel(fromLang, "en"),
+        Models.getModel("en", toLang)
+      ]);
+      return [payload1, payload2];
     } else {
-      return [this.#models[`${fromLang}_${toLang}`]];
+      const payload = await Models.getModel(fromLang, toLang);
+      return [payload];
     }
   }
 
@@ -388,7 +386,7 @@ class Translator {
    * @param {string} languagePairKey - 语言对键名
    */
   static handleTranslationResponse(data, languagePairKey) {
-    const { messageId, targetText } = data;
+    const { messageId, targetText, shouldRestart } = data;
     const pendingMessage = this.#pendingMessages.get(messageId);
 
     if (pendingMessage) {
@@ -398,6 +396,51 @@ class Translator {
     }
 
     this.keepAlive(languagePairKey);
+
+    // 处理Worker重启请求
+    if (shouldRestart) {
+      this.handleWorkerRestart(languagePairKey);
+    }
+  }
+
+  /**
+   * 处理Worker重启
+   * @param {string} languagePairKey - 语言对键名
+   */
+  static async handleWorkerRestart(languagePairKey) {
+    const cachedEngine = this.#cachedEngines.get(languagePairKey);
+    if (!cachedEngine) return;
+
+    try {
+      Logger.info("Translator", `开始重启Worker池: ${languagePairKey}`);
+      
+      // 解析语言对
+      const [fromLang, toLang] = languagePairKey.split('_');
+      
+      // 创建新的Worker池
+      const newWorkerPool = await this.createWorkerPool(fromLang, toLang);
+      
+      // 等待一小段时间确保新Worker池准备就绪
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // 关闭旧的Worker池
+      if (cachedEngine.workerPool) {
+        for (const worker of cachedEngine.workerPool) {
+          worker.terminate();
+        }
+      }
+      
+      // 更新缓存
+      cachedEngine.workerPool = newWorkerPool;
+      cachedEngine.nextWorkerIndex = 0;
+      cachedEngine.lastUsedTime = Date.now();
+      
+      this.#cachedEngines.set(languagePairKey, cachedEngine);
+      
+      Logger.info("Translator", `Worker池重启完成: ${languagePairKey}`);
+    } catch (error) {
+      Logger.error("Translator", `Worker池重启失败: ${languagePairKey}`, error.message);
+    }
   }
 
   /**
@@ -453,15 +496,9 @@ class Translator {
     if (!cachedEngine) return;
 
     cachedEngine.lastUsedTime = Date.now();
-
-    // 避免频繁重置超时计时器
-    const timeSinceLastReset = Date.now() - (cachedEngine.lastTimeoutReset || 0);
-    const shouldResetTimeout = !cachedEngine.timeoutId || timeSinceLastReset > TIMEOUT_RESET_THRESHOLD_MS;
-
-    if (shouldResetTimeout) {
-      this.resetEngineTimeout(cachedEngine, languagePairKey);
-    }
-
+    
+    // 简化超时重置逻辑
+    this.resetEngineTimeout(cachedEngine, languagePairKey);
     this.#cachedEngines.set(languagePairKey, cachedEngine);
   }
 
@@ -559,7 +596,7 @@ class Translator {
     for (const [languagePairKey, cachedEngine] of this.#cachedEngines.entries()) {
       if (now - cachedEngine.lastUsedTime >= timeoutMs) {
         Logger.info("Translator", 
-          `自动释放模型: ${languagePairKey}，闲置时间: ${Config.RELEASE_INTERVAL} 分钟`
+          `自动释放引擎: ${languagePairKey}，闲置时间: ${ENGINE_CACHE_TIMEOUT_MINUTES} 分钟`
         );
         this.removeEngine(languagePairKey);
         releasedCount++;
@@ -568,7 +605,6 @@ class Translator {
 
     if (releasedCount > 0) {
       Logger.info("Translator", `内存检查完成，释放了 ${releasedCount} 个引擎`);
-      this.releaseUnusedModelMemory();
     }
   }
 
@@ -613,85 +649,17 @@ class Translator {
    * @param {string} toLang - 目标语言
    * @param {boolean} needMiddle - 是否需要中间语言
    */
-  static async loadModels(fromLang, toLang, needMiddle = false) {
-    if (!this.#models) {
-      Logger.debug("Translator", "初始化模型管理器");
-      await Models.init();
-      this.#models = {};
-    }
-
-    // 加载已下载模型
-    const downloadedModels = await Models.getDownloadedModels();
-    await this.loadDownloadedModels(downloadedModels);
-
-    // 加载所需模型
-    if (!downloadedModels.includes(`${fromLang}_${toLang}`)) {
-      await this.loadRequiredModels(fromLang, toLang, needMiddle);
-    }
-  }
-
-  /**
-   * 加载已下载的模型
-   * @param {Array} downloadedModels - 已下载的模型列表
-   */
-  static async loadDownloadedModels(downloadedModels) {
-    const loadPromises = downloadedModels
-      .filter(model => !this.#models[model])
-      .map(async (model) => {
-        const [_fromLang, _toLang] = model.split("_");
-        const payload = await Models.getModel(_fromLang, _toLang);
-        this.#models[model] = payload;
-        Logger.debug("Translator", `加载已下载模型: ${model}`);
-      });
-
-    await Promise.all(loadPromises);
-  }
-
-  /**
-   * 加载所需模型
-   * @param {string} fromLang - 源语言
-   * @param {string} toLang - 目标语言
-   * @param {boolean} needMiddle - 是否需要中间语言
-   */
-  static async loadRequiredModels(fromLang, toLang, needMiddle) {
+  static async loadModels(fromLang, toLang, needMiddle) {
+    // 简化模型加载，直接调用Models.getModel
     if (needMiddle) {
       Logger.info("Translator", `加载中间翻译模型: ${fromLang} -> en -> ${toLang}`);
-      const [payload1, payload2] = await Promise.all([
+      await Promise.all([
         Models.getModel(fromLang, "en"),
         Models.getModel("en", toLang)
       ]);
-      this.#models[`${fromLang}_en`] = payload1;
-      this.#models[`en_${toLang}`] = payload2;
     } else {
       Logger.info("Translator", `加载直接翻译模型: ${fromLang} -> ${toLang}`);
-      const payload = await Models.getModel(fromLang, toLang);
-      this.#models[`${fromLang}_${toLang}`] = payload;
-    }
-  }
-
-  /**
-   * 释放未使用的模型内存
-   */
-  static releaseUnusedModelMemory() {
-    if (!this.#models) return;
-
-    // 获取当前正在使用的模型列表
-    const activeModels = this.getActiveModels();
-
-    // 释放不在活跃列表中的模型
-    const modelKeys = Object.keys(this.#models);
-    let releasedCount = 0;
-
-    for (const modelKey of modelKeys) {
-      if (!activeModels.has(modelKey)) {
-        delete this.#models[modelKey];
-        releasedCount++;
-        Logger.debug("Translator", `释放模型内存: ${modelKey}`);
-      }
-    }
-
-    if (releasedCount > 0) {
-      Logger.info("Translator", `释放了 ${releasedCount} 个未使用的模型`);
+      await Models.getModel(fromLang, toLang);
     }
   }
 
@@ -976,7 +944,7 @@ class Translator {
     const stats = {
       activeEngines: this.#cachedEngines.size,
       pendingMessages: this.#pendingMessages.size,
-      loadedModels: this.#models ? Object.keys(this.#models).length : 0,
+      loadedModels: 0, // 不再跟踪加载的模型数量
       memoryTimerActive: !!this.#memoryReleaseTimer,
       engines: [],
     };
