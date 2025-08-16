@@ -485,6 +485,7 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
 async function getModel(fromLang, toLang, forceUpdate = false) {
   const modelFiles = await getModelPaths(fromLang, toLang, forceUpdate);
   const languageModelFiles = {};
+  
   for (const [fileType, filePath] of Object.entries(modelFiles)) {
     const modelRecord = {
       name: path.basename(filePath),
@@ -492,18 +493,24 @@ async function getModel(fromLang, toLang, forceUpdate = false) {
       fromLang: fromLang,
       toLang: toLang,
     };
+    
+    // 读取文件并立即添加到模型中
+    const buffer = await fs.readFile(filePath);
     languageModelFiles[fileType] = {
-      buffer: await fs.readFile(filePath),
+      buffer: buffer,
       record: modelRecord,
     };
   }
+  
   const payload = {
     sourceLanguage: fromLang,
     targetLanguage: toLang,
     languageModelFiles: languageModelFiles,
   };
 
+  // 立即清理临时变量以释放内存
   gc();
+  
   return payload;
 }
 

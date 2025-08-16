@@ -61,6 +61,9 @@ class Translator {
     }
 
     try {
+      // 在创建新引擎前先释放不需要的模型内存
+      this.releaseUnusedModelMemory();
+
       // 创建worker池
       const workerPool = await this.createWorkerPool(fromLang, toLang);
 
@@ -191,6 +194,9 @@ class Translator {
       const worker = await this.createWorker(fromLang, toLang, modelPayloads);
       workerPool.push(worker);
     }
+
+    // 创建worker池后立即释放不需要的模型内存
+    this.releaseUnusedModelMemory();
 
     return workerPool;
   }
@@ -343,6 +349,9 @@ class Translator {
 
     this.#cachedEngines.delete(languagePairKey);
 
+    // 移除引擎后立即释放不需要的模型内存
+    this.releaseUnusedModelMemory();
+
     // 如果没有更多的引擎，停止内存释放定时器
     if (this.#cachedEngines.size === 0) {
       this.stopMemoryReleaseTimer();
@@ -433,42 +442,54 @@ class Translator {
 
     // 清空缓存
     this.#cachedEngines.clear();
+
+    // 清空所有模型数据
+    if (this.models) {
+      for (const modelKey of Object.keys(this.models)) {
+        delete this.models[modelKey];
+      }
+      this.models = null;
+      gc();
+      if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+        console.log("All model memory released");
+      }
+    }
   }
 
   static models = null;
 
+  // 修改loadModels方法
   static async loadModels(fromLang, toLang, needMiddle = false) {
     if (!this.models) {
       await Models.init();
       this.models = {};
     }
 
-    // 加载已下载模型
-    const downloadedModels = await Models.getDownloadedModels();
-    for (const model of downloadedModels) {
-      if (!this.models[model]) {
-        const [_fromLang, _toLang] = model.split("_");
-        const payload = await Models.getModel(_fromLang, _toLang);
-        this.models[model] = payload;
-      }
+    // 确定需要加载的模型
+    const requiredModels = [];
+    if (needMiddle) {
+      requiredModels.push(`${fromLang}_en`);
+      requiredModels.push(`en_${toLang}`);
+    } else {
+      requiredModels.push(`${fromLang}_${toLang}`);
     }
 
-    if (!downloadedModels.includes(`${fromLang}_${toLang}`)) {
-      if (needMiddle) {
-        const payload1 = await Models.getModel(fromLang, "en");
-        const payload2 = await Models.getModel("en", toLang);
-        this.models[`${fromLang}_en`] = payload1;
-        this.models[`en_${toLang}`] = payload2;
-      } else {
-        const payload = await Models.getModel(fromLang, toLang);
-        this.models[`${fromLang}_${toLang}`] = payload;
+    // 只加载当前需要的模型
+    for (const modelKey of requiredModels) {
+      if (!this.models[modelKey]) {
+        const [_fromLang, _toLang] = modelKey.split("_");
+        const payload = await Models.getModel(_fromLang, _toLang);
+        this.models[modelKey] = payload;
+        if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+          console.log(`Loaded model for ${modelKey}`);
+        }
       }
     }
 
     gc();
   }
 
-  // 释放未使用的模型内存
+  // 优化释放未使用模型内存的方法
   static releaseUnusedModelMemory() {
     if (!this.models) return;
 
@@ -492,16 +513,24 @@ class Translator {
 
     // 释放不在活跃列表中的模型
     const modelKeys = Object.keys(this.models);
+    let releasedCount = 0;
+
     for (const modelKey of modelKeys) {
       if (!activeModels.has(modelKey)) {
         delete this.models[modelKey];
+        releasedCount++;
         if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
           console.log(`Released model memory for ${modelKey}`);
         }
       }
     }
 
-    gc();
+    if (releasedCount > 0) {
+      if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+        console.log(`Released ${releasedCount} unused models from memory`);
+      }
+      gc();
+    }
   }
 
   static async DetectLang(text) {
