@@ -2,6 +2,7 @@
 
 const { performance } = require("perf_hooks");
 const Translator = require("../js/translator");
+const Logger = require("../js/logger");
 
 /**
  * 测试翻译
@@ -73,23 +74,48 @@ async function testBatchTranslation(
 }
 
 /**
+ * 重复执行单项翻译测试
+ * @param {string} text 要翻译的文本
+ * @param {string} fromLang 源语言
+ * @param {string} toLang 目标语言
+ * @param {number} repeatCount 重复次数
+ * @param {boolean} isHTML 是否为HTML内容
+ */
+async function repeatTranslationTest(
+  text,
+  fromLang,
+  toLang,
+  repeatCount = 3,
+  isHTML = false
+) {
+  Logger.debug(
+    "Test",
+    `开始重复测试 ${repeatCount} 次 (${fromLang} -> ${toLang})`
+  );
+  for (let i = 0; i < repeatCount; i++) {
+    await testTranslation(text, fromLang, toLang, isHTML);
+  }
+}
+
+/**
  * 运行测试
  */
 async function runTest() {
+  const REPEAT_COUNT = 3; // 统一的重复测试次数
+
   try {
     // LogMem("测试开始");
 
     // 测试英文到中文翻译
     console.log("\n测试英文到中文翻译");
-    for (let i = 0; i < 3; i++) {
-      await testTranslation("Warm up", "en", "zh-Hans");
-      await testTranslation("Hello world", "en", "zh-Hans");
-      await testTranslation(
-        "Open Source Alternative to NotebookLM / Perplexity / Glean, connected to external sources such as search engines (Tavily, Linkup), Slack, Linear, Notion, YouTube, GitHub, Discord and more.",
-        "en",
-        "zh-Hans"
-      );
-    }
+    await testTranslation("Warm up", "en", "zh-Hans"); // 预热
+    await repeatTranslationTest("Hello world", "en", "zh-Hans", REPEAT_COUNT);
+    await repeatTranslationTest(
+      "Open Source Alternative to NotebookLM / Perplexity / Glean, connected to external sources such as search engines (Tavily, Linkup), Slack, Linear, Notion, YouTube, GitHub, Discord and more.",
+      "en",
+      "zh-Hans",
+      REPEAT_COUNT
+    );
     // LogMem("英文到中文翻译测试后");
 
     // 测试英文到中文的批量翻译
@@ -107,14 +133,14 @@ async function runTest() {
 
     // 测试中文到英文翻译
     console.log("\n测试中文到英文翻译");
-    for (let i = 0; i < 3; i++) {
-      await testTranslation("你好，世界", "zh-Hans", "en");
-      await testTranslation(
-        "WASM VM 的性能无法与编译为 x86 的应用程序相提并论：一个方面是调用WASM模块的开销。传递数据来往。这并不像人们想象的那样多。如果你经常来回调用，这可能是一个需要优化的领域。这也包括有多少数据被传递过去。因为这被复制了。",
-        "zh-Hans",
-        "en"
-      );
-    }
+    await testTranslation("预热", "zh-Hans", "en"); // 预热
+    await repeatTranslationTest("你好，世界", "zh-Hans", "en", REPEAT_COUNT);
+    await repeatTranslationTest(
+      "WASM VM 的性能无法与编译为 x86 的应用程序相提并论：一个方面是调用WASM模块的开销。传递数据来往。这并不像人们想象的那样多。如果你经常来回调用，这可能是一个需要优化的领域。这也包括有多少数据被传递过去。因为这被复制了。",
+      "zh-Hans",
+      "en",
+      REPEAT_COUNT
+    );
     // LogMem("中文到英文翻译测试后");
 
     // 测试中文到英文的批量翻译
@@ -132,31 +158,140 @@ async function runTest() {
 
     // 测试简繁转换
     console.log("\n测试简体到繁体转换");
-    await testTranslation("简体中文转换为繁体中文测试", "zh-Hans", "zh-Hant");
+    await repeatTranslationTest(
+      "简体中文转换为繁体中文测试",
+      "zh-Hans",
+      "zh-Hant",
+      REPEAT_COUNT
+    );
     // LogMem("简体到繁体转换测试后");
 
     console.log("\n测试繁体到简体转换");
-    await testTranslation("繁體中文轉換為簡體中文測試", "zh-Hant", "zh-Hans");
+    await repeatTranslationTest(
+      "繁體中文轉換為簡體中文測試",
+      "zh-Hant",
+      "zh-Hans",
+      REPEAT_COUNT
+    );
     // LogMem("繁体到简体转换测试后");
 
     // 测试非英语之间的翻译
     console.log("\n测试中文到日文翻译");
-    await testTranslation(
+    await repeatTranslationTest(
       "这是一个通过英文作为中间语言的翻译测试",
       "zh-Hans",
-      "ja"
+      "ja",
+      REPEAT_COUNT
     );
     // LogMem("中文到日文翻译测试后");
 
+    // 测试其他跨英文的翻译
+    console.log("\n测试德语到法语翻译");
+    await repeatTranslationTest(
+      "Hallo, wie geht es Ihnen heute?",
+      "de",
+      "fr",
+      REPEAT_COUNT
+    );
+    // LogMem("德语到法语翻译测试后");
+
+    console.log("\n测试西班牙语到意大利语翻译");
+    await repeatTranslationTest(
+      "Buenos días, ¿cómo estás?",
+      "es",
+      "it",
+      REPEAT_COUNT
+    );
+    // LogMem("西班牙语到意大利语翻译测试后");
+
+    console.log("\n测试俄语到葡萄牙语翻译");
+    await repeatTranslationTest(
+      "Здравствуйте, как вы сегодня?",
+      "ru",
+      "pt",
+      REPEAT_COUNT
+    );
+    // LogMem("俄语到葡萄牙语翻译测试后");
+
+    // 测试跨语言批量翻译
+
+    // 测试中文到日文批量翻译
+    console.log("\n测试中文到日文批量翻译");
+    const zhToJaTexts = [
+      "这是一个通过英文作为中间语言的翻译测试",
+      "批量翻译可以提高效率",
+      "跨语言翻译需要中间语言",
+    ];
+    await testBatchTranslation(zhToJaTexts, "zh-Hans", "ja", false);
+
+    // 测试德语到法语批量翻译
+    console.log("\n测试德语到法语批量翻译");
+    const deToFrTexts = [
+      "Hallo, wie geht es Ihnen heute?",
+      "Dies ist ein Batch-Übersetzungstest",
+      "Mehrsprachige Übersetzung ist wichtig",
+    ];
+    await testBatchTranslation(deToFrTexts, "de", "fr", false);
+
+    // 测试西班牙语到意大利语批量翻译
+    console.log("\n测试西班牙语到意大利语批量翻译");
+    const esToItTexts = [
+      "Buenos días, ¿cómo estás?",
+      "Esta es una prueba de traducción por lotes",
+      "La traducción entre idiomas es útil",
+    ];
+    await testBatchTranslation(esToItTexts, "es", "it", false);
+
+    // 测试俄语到葡萄牙语批量翻译
+    console.log("\n测试俄语到葡萄牙语批量翻译");
+    const ruToPtTexts = [
+      "Здравствуйте, как вы сегодня?",
+      "Это тест пакетного перевода",
+      "Перевод между языками важен",
+    ];
+    await testBatchTranslation(ruToPtTexts, "ru", "pt", false);
+    // LogMem("批量翻译测试后");
+
     // 测试自动语言检测
     console.log("\n测试自动语言检测");
-    await testTranslation(
+    await repeatTranslationTest(
       "This is an automatic language detection test",
       "auto",
-      "zh-Hans"
+      "zh-Hans",
+      REPEAT_COUNT
     );
-    await testTranslation("这是一个自动语言检测测试", "auto", "en");
+    await repeatTranslationTest(
+      "这是一个自动语言检测测试",
+      "auto",
+      "en",
+      REPEAT_COUNT
+    );
     // LogMem("自动语言检测测试后");
+
+    // 测试HTML内容翻译
+    console.log("\n测试HTML内容翻译");
+    await repeatTranslationTest(
+      "<p>This is a <strong>HTML</strong> translation test.</p>",
+      "en",
+      "zh-Hans",
+      REPEAT_COUNT,
+      true
+    );
+    // LogMem("HTML内容翻译测试后");
+
+    // 测试长文本翻译
+    console.log("\n测试长文本翻译");
+    await repeatTranslationTest(
+      "The WebAssembly System Interface (WASI) is a modular system interface for WebAssembly. " +
+        "As WebAssembly continues to grow in popularity and expand into new domains, " +
+        "there's an increasing need for a standard way for WebAssembly modules to interact with their environment. " +
+        "WASI aims to provide a standardized set of APIs that allow WebAssembly modules to access system resources " +
+        "in a secure, portable, and efficient manner.",
+      "en",
+      "zh-Hans",
+      2 // 长文本减少重复次数
+    );
+    // LogMem("长文本翻译测试后");
 
     console.log("\n测试完成");
     // LogMem("测试结束");

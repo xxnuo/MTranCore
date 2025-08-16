@@ -11,7 +11,6 @@ async function cc(text, type) {
 
 async function testOpencc() {
   try {
-    await OpenCC.warmup();
     // await cc("简体到繁体：\n世间无限丹青手 一片伤心画不成", "s2t");
     // await cc("繁体到简体：\n落葉他鄉樹 寒燈獨夜人", "t2s");
     // await cc("简体到台湾繁体：\n我见青山多妩媚 料青山见我应如是", "s2tw");
