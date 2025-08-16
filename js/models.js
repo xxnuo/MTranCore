@@ -240,9 +240,11 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
           // 检查是否处于离线模式
           if (Config.OFFLINE) {
             throw new Error(
-              `Cannot download model in offline mode: ${langPair}`
+              `Cannot update model in offline mode: ${langPair}`
             );
           }
+
+          console.log(`Updating model: ${langPair}`);
 
           allFilesExist = false; // 有文件需要下载，标记为不是所有文件都存在
           const downloadUrl = `${MODELS_BASE_URL}/${fileInfo.attachment.location}`;
