@@ -7,7 +7,7 @@ import fs from 'fs';
 async function main() {
   try {
     // 清空 dist 目录
-    fs.rmSync('dist', { recursive: true });
+    fs.rmSync('dist', { recursive: true, force: true });
     fs.mkdirSync('dist');
     fs.mkdirSync('dist/assets', { recursive: true });
 
