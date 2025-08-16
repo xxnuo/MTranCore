@@ -138,11 +138,6 @@ function getAllModels() {
 
 // 重新下载模型索引并自动重载模型索引数据
 async function loadModelJson(forceRedownload = false) {
-  // 在离线模式下，不允许强制重新下载
-  if (Config.OFFLINE) {
-    forceRedownload = false;
-  }
-
   if (forceRedownload || !(await exists(MODELS_JSON_PATH))) {
     try {
       // 同步下载，确保等待下载完成
