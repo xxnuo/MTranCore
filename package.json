@@ -1,7 +1,7 @@
 {
   "name": "@mtran/core",
   "homepage": "https://github.com/xxnuo",
-  "version": "3.0.3",
+  "version": "3.0.4",
   "type": "commonjs",
   "main": "dist/mt.js",
   "bin": {
