@@ -89,7 +89,7 @@ benchmark: prepare-py
 
 benchmark-sub:
 	@echo "测试 $(name) 在 Node.js 环境下的性能..."
-	uv run psrecord --plot ./benchmark/plots/$(name).node.png --include-children --log ./benchmark/logs/$(name).node.log "node ./example/$(name)"
+	uv run psrecord --plot ./benchmark/plots/$(name).node.png --include-children --log ./benchmark/logs/$(name).node.log "node --expose-gc ./example/$(name)"
 	
 	@echo "测试 $(name) 在 Bun 环境下的性能..."
 	uv run psrecord --plot ./benchmark/plots/$(name).bun.png --include-children --log ./benchmark/logs/$(name).bun.log "bun ./example/$(name)"
