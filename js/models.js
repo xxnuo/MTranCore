@@ -49,7 +49,7 @@ async function ensureDir(dir) {
 async function init() {
   await ensureDir(CACHE_DIR);
   await ensureDir(MODELS_DIR);
-  MODELS_DATA = await loadModelJson();
+  MODELS_DATA = await loadModelJson(!Config.OFFLINE);
   MODELS_FLAGS = await loadModelFlags();
 }
 
@@ -108,11 +108,6 @@ function getAllModels() {
 async function loadModelJson(forceRedownload = false) {
   if (forceRedownload || !(await exists(MODELS_JSON_PATH))) {
     try {
-      if (Config.OFFLINE) {
-        throw new Error(
-          "Offline mode is not supported for loading models.json"
-        );
-      }
       // 同步下载，确保等待下载完成
       await Downloader.download(MODELS_JSON_URL, MODELS_JSON_PATH);
     } catch (error) {

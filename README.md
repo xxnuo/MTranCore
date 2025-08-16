@@ -12,3 +12,7 @@
 ## Default Model Storage Path
 
 - Model files are stored in the `~/.cache/mtran/models` directory
+
+## Development
+
+The active branch is `wasm-v3`, welcome to submit contributions and improvements!
