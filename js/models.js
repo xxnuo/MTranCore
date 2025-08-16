@@ -143,6 +143,7 @@ async function loadModelJson(forceRedownload = false) {
     try {
       // 同步下载，确保等待下载完成
       if (!Config.OFFLINE) {
+        console.log(`Downloading models.json`);
         await Downloader.download(MODELS_JSON_URL, MODELS_JSON_PATH);
       } else if (!(await exists(MODELS_JSON_PATH))) {
         // 离线模式且文件不存在时返回空数据
