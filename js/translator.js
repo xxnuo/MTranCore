@@ -30,6 +30,14 @@ class Translator {
   static #memoryReleaseTimer = null;
   static #memoryCheckIntervalMs = 60000; // 每分钟检查一次
 
+  static #translationCounter = 0; // 翻译计数器
+  static #gcThreshold = Config.GC_THRESHOLD; // 触发垃圾回收的翻译次数阈值
+
+  // 设置翻译计数器的垃圾回收阈值
+  static setGCThreshold(threshold) {
+    this.#gcThreshold = Math.max(1, threshold); // 确保阈值至少为1
+  }
+
   static GetSupportLanguages() {
     return Lang.MALL;
   }
@@ -103,6 +111,9 @@ class Translator {
     const isTextArray = Array.isArray(texts);
     const sourceTexts = isTextArray ? texts : [texts];
 
+    // 更新翻译计数器
+    this.#translationCounter += sourceTexts.length;
+
     // 创建翻译任务
     const results = [];
     for (const sourceText of sourceTexts) {
@@ -137,6 +148,21 @@ class Translator {
       } else {
         results.push("");
       }
+    }
+
+    // 基于翻译计数器触发垃圾回收
+    if (this.#translationCounter >= this.#gcThreshold) {
+      if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+        console.log(
+          `Translation counter reached threshold (${this.#translationCounter}/${
+            this.#gcThreshold
+          }), triggering garbage collection`
+        );
+      }
+
+      gc();
+
+      this.#translationCounter = 0; // 重置计数器
     }
 
     return isTextArray ? results : results[0];
@@ -438,6 +464,8 @@ class Translator {
         this.models[`${fromLang}_${toLang}`] = payload;
       }
     }
+
+    gc();
   }
 
   // 释放未使用的模型内存
@@ -472,6 +500,8 @@ class Translator {
         }
       }
     }
+
+    gc();
   }
 
   static async DetectLang(text) {
@@ -601,12 +631,30 @@ class Translator {
     if (pureCC && _fromLang !== "zh-Hans") {
       if (pureCCComplex) {
         // 使用Promise.all并行处理数组
-        return Promise.all(
+        const results = await Promise.all(
           texts.map(async (item) => {
             const _text = await OpenCC.convert(item, pureCCComplexType1);
             return OpenCC.convert(_text, pureCCComplexType2);
           })
         );
+
+        // 更新翻译计数器
+        this.#translationCounter += texts.length;
+
+        // 基于翻译计数器触发垃圾回收
+        if (this.#translationCounter >= this.#gcThreshold) {
+          if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+            console.log(
+              `Translation counter reached threshold (${
+                this.#translationCounter
+              }/${this.#gcThreshold}), triggering garbage collection`
+            );
+          }
+          gc();
+          this.#translationCounter = 0; // 重置计数器
+        }
+
+        return results;
       } else {
         // 使用Promise.all并行处理数组
         texts = await Promise.all(
@@ -614,6 +662,9 @@ class Translator {
             return await OpenCC.convert(item, preProcessType);
           })
         );
+
+        // 更新翻译计数器
+        this.#translationCounter += texts.length;
       }
     } else {
       // 使用引擎管理器获取或创建引擎
@@ -637,6 +688,19 @@ class Translator {
       for (let i = 0; i < texts.length; i++) {
         texts[i] = await OpenCC.convert(texts[i], postProcessType);
       }
+    }
+
+    // 基于翻译计数器触发垃圾回收
+    if (this.#translationCounter >= this.#gcThreshold) {
+      if (Config.LOG_LEVEL === "Info" || Config.LOG_LEVEL === "Debug") {
+        console.log(
+          `Translation counter reached threshold (${this.#translationCounter}/${
+            this.#gcThreshold
+          }), triggering garbage collection`
+        );
+      }
+      gc();
+      this.#translationCounter = 0; // 重置计数器
     }
 
     // 返回

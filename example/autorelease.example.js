@@ -5,6 +5,7 @@ process.env.MTRAN_RELEASE_INTERVAL = "0.1"; // 0.1分钟
 
 const Translator = require("../js/translator");
 const { LogMem } = require("../js/mem");
+const { gc, isGCAvailable } = require("../js/utils");
 const { performance } = require("perf_hooks");
 
 /**
@@ -51,9 +52,9 @@ async function testSingleModelAutoRelease() {
   
   // 强制垃圾回收（如果可用）
   try {
-    if (global.gc) {
+    if (isGCAvailable) {
       console.log("\n强制垃圾回收...");
-      global.gc();
+      gc();
       LogMem("垃圾回收后");
     }
   } catch (e) {
@@ -108,9 +109,9 @@ async function testMultipleModelsAutoRelease() {
   
   // 强制垃圾回收（如果可用）
   try {
-    if (global.gc) {
+    if (isGCAvailable) {
       console.log("\n强制垃圾回收...");
-      global.gc();
+      gc();
       LogMem("垃圾回收后");
     }
   } catch (e) {

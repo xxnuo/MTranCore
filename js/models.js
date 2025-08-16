@@ -7,6 +7,7 @@ const Config = require("./config");
 const { MALL } = require("./lang");
 const DownloaderClass = require("./downloader");
 const Downloader = new DownloaderClass(); // 创建下载器实例
+const { gc } = require("./utils");
 
 const CACHE_DIR = Config.DATA_DIR;
 const MODELS_JSON_URL = Config.MODELS_JSON_URL;
@@ -50,7 +51,7 @@ async function ensureDir(dir) {
 async function init() {
   await ensureDir(CACHE_DIR);
   await ensureDir(MODELS_DIR);
-  
+
   try {
     // 离线模式下只尝试加载本地文件，不进行更新
     if (Config.OFFLINE) {
@@ -58,13 +59,15 @@ async function init() {
       if (await exists(MODELS_JSON_PATH)) {
         MODELS_DATA = await loadModelJson(false);
       } else {
-        console.warn("No local models.json found in offline mode. Some features may be limited.");
+        console.warn(
+          "No local models.json found in offline mode. Some features may be limited."
+        );
         MODELS_DATA = { data: [] };
       }
     } else {
       MODELS_DATA = await loadModelJson(!Config.OFFLINE);
     }
-    
+
     MODELS_FLAGS = await loadModelFlags();
   } catch (error) {
     console.error(`Error initializing models: ${error.message}`);
@@ -72,6 +75,7 @@ async function init() {
     MODELS_DATA = MODELS_DATA || { data: [] };
     MODELS_FLAGS = MODELS_FLAGS || { downloaded: [], versions: {} };
   }
+  gc();
 }
 
 // 保存模型标志到文件
@@ -138,11 +142,11 @@ async function loadModelJson(forceRedownload = false) {
   if (Config.OFFLINE) {
     forceRedownload = false;
   }
-  
+
   if (forceRedownload || !(await exists(MODELS_JSON_PATH))) {
     try {
       // 同步下载，确保等待下载完成
-      if (!Config.OFFLINE) {
+      if (!Config.OFFLINE || forceRedownload) {
         console.log(`Downloading models.json`);
         await Downloader.download(MODELS_JSON_URL, MODELS_JSON_PATH);
       } else if (!(await exists(MODELS_JSON_PATH))) {
@@ -281,26 +285,26 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
   try {
     // 使用下划线作为分隔符，避免与语言代码中的破折号混淆
     const langPair = `${fromLang}_${toLang}`;
-    
+
     // 获取最新的模型信息
     const modelFiles = getModelInfo(fromLang, toLang);
-    
+
     // 检查是否有可用模型
     if (!Object.values(modelFiles).some((file) => file !== null)) {
       throw new Error(
         `No model files found for language pair: ${fromLang}_${toLang}`
       );
     }
-    
+
     // 检查是否有版本更新
     let hasNewerVersion = false;
     let currentVersions = {};
-    
+
     // 收集最新模型的版本信息
     Object.entries(modelFiles).forEach(([fileType, fileInfo]) => {
       if (fileInfo && fileInfo.version) {
         currentVersions[fileType] = fileInfo.version;
-        
+
         // 检查是否有更新的版本，仅在非离线模式下进行检查
         if (!Config.OFFLINE) {
           const storedVersion = MODELS_FLAGS.versions[langPair]?.[fileType];
@@ -316,7 +320,7 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
         }
       }
     });
-    
+
     // 如果已下载且不需要强制更新且没有新版本，直接从本地获取
     if (
       MODELS_FLAGS.downloaded.includes(langPair) &&
@@ -349,7 +353,7 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
         const fileName = fileInfo.name;
         const filePath = path.join(MODELS_DIR, fileName);
         const expectedHash = fileInfo.attachment.hash;
-        
+
         // 检查是否需要更新版本，离线模式下不检查版本更新
         const storedVersion = MODELS_FLAGS.versions[langPair]?.[fileType];
         const needsVersionUpdate =
@@ -374,7 +378,8 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
         };
 
         const needsDownload =
-          (forceUpdate || needsVersionUpdate || !(await isValid())) && !Config.OFFLINE;
+          (forceUpdate || needsVersionUpdate || !(await isValid())) &&
+          !Config.OFFLINE;
 
         if (needsDownload) {
           console.log(
@@ -412,18 +417,18 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
       //   `All model files for ${fromLang}_${toLang} already exist, marking as downloaded`
       // );
       MODELS_FLAGS.downloaded.push(langPair);
-      
+
       // 更新版本信息
       if (!MODELS_FLAGS.versions[langPair]) {
         MODELS_FLAGS.versions[langPair] = {};
       }
-      
+
       // 合并当前版本信息
       MODELS_FLAGS.versions[langPair] = {
         ...MODELS_FLAGS.versions[langPair],
         ...currentVersions,
       };
-      
+
       await saveModelFlags();
     }
 
@@ -439,7 +444,7 @@ async function getModelPaths(fromLang, toLang, forceUpdate = false) {
           const fileType = downloadTasks[index].fileType;
           const version = downloadTasks[index].version;
           downloadedFiles[fileType] = downloadTasks[index].destination;
-          
+
           // 更新版本信息
           if (version) {
             if (!MODELS_FLAGS.versions[langPair]) {
@@ -502,6 +507,8 @@ async function getModel(fromLang, toLang, forceUpdate = false) {
     targetLanguage: toLang,
     languageModelFiles: languageModelFiles,
   };
+
+  gc();
   return payload;
 }
 
@@ -527,29 +534,29 @@ async function checkModelUpdates(fromLang, toLang) {
   try {
     // 强制重新下载模型索引
     MODELS_DATA = await loadModelJson(true);
-    
+
     const langPair = `${fromLang}_${toLang}`;
     const modelFiles = getModelInfo(fromLang, toLang);
-    
+
     // 检查是否有可用模型
     if (!Object.values(modelFiles).some((file) => file !== null)) {
       return { hasUpdate: false, versions: {} };
     }
-    
+
     // 检查是否有版本更新
     let hasNewerVersion = false;
     const currentVersions = {};
     const newVersions = {};
-    
+
     // 收集最新模型的版本信息
     Object.entries(modelFiles).forEach(([fileType, fileInfo]) => {
       if (fileInfo && fileInfo.version) {
         newVersions[fileType] = fileInfo.version;
-        
+
         // 检查是否有更新的版本
         const storedVersion = MODELS_FLAGS.versions[langPair]?.[fileType];
         currentVersions[fileType] = storedVersion || "none";
-        
+
         if (
           !storedVersion ||
           compareVersions(fileInfo.version, storedVersion) > 0
@@ -558,7 +565,7 @@ async function checkModelUpdates(fromLang, toLang) {
         }
       }
     });
-    
+
     return {
       hasUpdate: hasNewerVersion,
       versions: {

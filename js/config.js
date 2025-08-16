@@ -29,6 +29,8 @@ class Config {
   // 模型内存自动释放的时间间隔（分钟），默认为 30 分钟
   static RELEASE_INTERVAL =
     parseFloat(process.env.MTRAN_RELEASE_INTERVAL) || 30.0;
+  // n 次翻译后垃圾回收阈值，默认为 1000 次
+  static GC_THRESHOLD = parseInt(process.env.MTRAN_GC_THRESHOLD, 10) || 1000;
 }
 
 module.exports = Config;
