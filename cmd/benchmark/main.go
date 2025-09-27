@@ -42,7 +42,7 @@ type BenchmarkResult struct {
 }
 
 var (
-	serverURL   = flag.String("url", "http://localhost:8080", "Server URL")
+	serverURL   = flag.String("url", "http://localhost:8988", "Server URL")
 	modelPath   = flag.String("model", "", "Model directory path (if empty, uses ./models/enzh)")
 	iterations  = flag.Int("n", 100, "Number of iterations")
 	concurrency = flag.Int("c", 1, "Number of concurrent workers")

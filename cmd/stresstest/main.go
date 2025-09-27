@@ -42,7 +42,7 @@ type StressTestResult struct {
 }
 
 var (
-	serverURL   = flag.String("url", "http://localhost:8080", "Server URL")
+	serverURL   = flag.String("url", "http://localhost:8988", "Server URL")
 	modelPath   = flag.String("model", "", "Model directory path (if empty, uses ./models/enzh)")
 	testType    = flag.String("test", "all", "Test type: all, concurrency, sustained, memory, reload, mixed")
 	concurrency = flag.Int("c", 50, "Number of concurrent workers for high-concurrency test")

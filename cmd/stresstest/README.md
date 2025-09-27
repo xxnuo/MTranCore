@@ -15,12 +15,12 @@ go build -o stresstest ./cmd/stresstest
 
 ```bash
 # Run all stress tests (default, using HTTP protocol)
-./stresstest -url http://localhost:8080 -model ./models/enzh
+./stresstest -url http://localhost:8988 -model ./models/enzh
 
 # Use different protocols
-./stresstest -protocol http -url http://localhost:8080    # HTTP protocol
+./stresstest -protocol http -url http://localhost:8988    # HTTP protocol
 ./stresstest -protocol grpc -url localhost:9090           # gRPC protocol
-./stresstest -protocol ws -url http://localhost:8080      # WebSocket protocol
+./stresstest -protocol ws -url http://localhost:8988      # WebSocket protocol
 
 # Run specific tests
 ./stresstest -test concurrency -c 50     # High concurrency test
@@ -32,10 +32,10 @@ go build -o stresstest ./cmd/stresstest
 
 ### Parameter Description
 
-- `-url string`: Server URL (default: `http://localhost:8080`)
-  - HTTP protocol: `http://localhost:8080`
+- `-url string`: Server URL (default: `http://localhost:8988`)
+  - HTTP protocol: `http://localhost:8988`
   - gRPC protocol: `localhost:9090` (host:port format)
-  - WebSocket protocol: `http://localhost:8080` (automatically converted to ws://)
+  - WebSocket protocol: `http://localhost:8988` (automatically converted to ws://)
 - `-protocol string`: Communication protocol (default: `http`)
   - `http`: HTTP REST API
   - `grpc`: gRPC protocol
@@ -74,7 +74,7 @@ Simulates real scenarios with mixed translation requests, health checks, and rea
 
 ```
 === Stress Test Configuration ===
-Server URL: http://localhost:8080
+Server URL: http://localhost:8988
 Protocol: http
 Model Path: /path/to/models/enzh
 Test Type: concurrency
