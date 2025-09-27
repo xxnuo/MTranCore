@@ -45,7 +45,6 @@ func main() {
 	m := cmux.New(lis)
 
 	var wg sync.WaitGroup
-	shutdownCh := make(chan struct{})
 
 	// Match gRPC connections
 	grpcListener := m.MatchWithWriters(
@@ -64,7 +63,7 @@ func main() {
 
 	if cfg.EnableHTTP || cfg.EnableWebSocket {
 		unifiedServer = NewUnifiedServer(cfg)
-		
+
 		if cfg.EnableHTTP {
 			enabledServices = append(enabledServices, "HTTP")
 		}
@@ -79,7 +78,7 @@ func main() {
 		grpcServerInstance = grpc.NewServer()
 		pb.RegisterTranslatorServiceServer(grpcServerInstance, grpcService)
 		reflection.Register(grpcServerInstance)
-		
+
 		// Link gRPC service with unified server for shared state
 		if unifiedServer != nil {
 			unifiedServer.SetGRPCService(grpcService)
@@ -127,37 +126,37 @@ func main() {
 				Debug("  - poweroff - Shutdown server")
 				Debug("  - ready    - Check engine status")
 				Debug("  - compute  - Translate text")
-		}
+			}
 
-		// Use the HTTP listener from cmux
-		// Temporarily redirect stdout to suppress Fiber's startup banner
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
+			// Use the HTTP listener from cmux
+			// Temporarily redirect stdout to suppress Fiber's startup banner
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
 
-		// Start listening
-		errCh := make(chan error, 1)
-		go func() {
-			errCh <- unifiedServer.app.Listener(httpListener, fiber.ListenConfig{
-				DisableStartupMessage: true,
-			})
-		}()
+			// Start listening
+			errCh := make(chan error, 1)
+			go func() {
+				errCh <- unifiedServer.app.Listener(httpListener, fiber.ListenConfig{
+					DisableStartupMessage: true,
+				})
+			}()
 
-		// Wait a bit for startup messages to be written
-		time.Sleep(100 * time.Millisecond)
+			// Wait a bit for startup messages to be written
+			time.Sleep(100 * time.Millisecond)
 
-		// Restore stdout
-		w.Close()
-		os.Stdout = oldStdout
+			// Restore stdout
+			w.Close()
+			os.Stdout = oldStdout
 
-		// Discard the captured output
-		io.Copy(io.Discard, r)
-		r.Close()
+			// Discard the captured output
+			io.Copy(io.Discard, r)
+			r.Close()
 
-		// Get any error
-		if err := <-errCh; err != nil {
-			Error("[HTTP/WebSocket] Server error: %v", err)
-		}
+			// Get any error
+			if err := <-errCh; err != nil {
+				Error("[HTTP/WebSocket] Server error: %v", err)
+			}
 		}()
 	}
 
@@ -184,10 +183,20 @@ func main() {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 
+	// Collect shutdown channels from all services
+	shutdownChannels := make([]<-chan struct{}, 0)
+	if unifiedServer != nil {
+		shutdownChannels = append(shutdownChannels, unifiedServer.ShutdownChannel())
+	}
+	if grpcService != nil {
+		shutdownChannels = append(shutdownChannels, grpcService.ShutdownChannel())
+	}
+
+	// Wait for either OS signal or service-initiated shutdown
 	select {
 	case <-sigCh:
 		Info("\nReceived shutdown signal, shutting down gracefully...")
-	case <-shutdownCh:
+	case <-mergeShutdownChannels(shutdownChannels):
 		Info("Shutdown initiated by service...")
 	}
 
@@ -214,4 +223,32 @@ func main() {
 
 	wg.Wait()
 	Info("All services stopped. Goodbye!")
+}
+
+// mergeShutdownChannels merges multiple shutdown channels into one
+func mergeShutdownChannels(channels []<-chan struct{}) <-chan struct{} {
+	merged := make(chan struct{})
+
+	if len(channels) == 0 {
+		// Return a channel that will never close if no channels provided
+		return merged
+	}
+
+	var wg sync.WaitGroup
+	for _, ch := range channels {
+		if ch != nil {
+			wg.Add(1)
+			go func(c <-chan struct{}) {
+				defer wg.Done()
+				<-c
+			}(ch)
+		}
+	}
+
+	go func() {
+		wg.Wait()
+		close(merged)
+	}()
+
+	return merged
 }

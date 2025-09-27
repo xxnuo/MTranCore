@@ -132,16 +132,10 @@ func (s *UnifiedServer) poweron(c fiber.Ctx) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Unload existing engine if any
+	// Check if engine is already loaded
 	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close existing translator: %v", err)
-		}
-		s.translator = nil
-	}
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
+		// Engine already loaded, return success immediately
+		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine already loaded"}))
 	}
 
 	// Create translator
@@ -367,15 +361,15 @@ func (s *UnifiedServer) handleWSPoweron(data json.RawMessage) WSResponse {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if engine is already loaded
 	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close existing translator: %v", err)
+		// Engine already loaded, return success immediately
+		return WSResponse{
+			Type: "poweron",
+			Code: int(CodeSuccess),
+			Msg:  "success",
+			Data: fiber.Map{"message": "Engine already loaded"},
 		}
-		s.translator = nil
-	}
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
 	}
 
 	ctx := context.Background()
