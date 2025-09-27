@@ -15,15 +15,15 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8080",
+      "url": "http://localhost:8989",
       "description": "HTTP/REST API Server"
     },
     {
-      "url": "http://localhost:8081",
+      "url": "http://localhost:8991",
       "description": "gRPC Server"
     },
     {
-      "url": "ws://localhost:8082",
+      "url": "ws://localhost:8990",
       "description": "WebSocket Server"
     }
   ],
