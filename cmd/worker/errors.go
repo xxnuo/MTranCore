@@ -7,7 +7,7 @@ type ErrorCode int
 
 const (
 	// Success code
-	CodeSuccess ErrorCode = 0
+	CodeSuccess ErrorCode = 200
 
 	// Poweron error codes (1000-1099)
 	CodePoweronInvalidParams   ErrorCode = 1000
