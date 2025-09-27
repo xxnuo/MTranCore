@@ -1,55 +1,55 @@
-# Benchmark Tool - 基准测试工具
+# Benchmark Tool
 
-用于测量 MTranCore 翻译服务器的性能。
+A tool for measuring the performance of the MTranCore translation server.
 
-## 编译
+## Build
 
 ```bash
 cd /home/xxnuo/projects/MTranCore
 go build -o benchmark ./cmd/benchmark
 ```
 
-## 使用方法
+## Usage
 
-### 基本用法
+### Basic Usage
 
 ```bash
-# 运行所有基准测试（默认，使用HTTP协议）
+# Run all benchmarks (default, using HTTP protocol)
 ./benchmark -url http://localhost:8080 -model ./models/enzh -n 100
 
-# 使用不同的协议
-./benchmark -protocol http -url http://localhost:8080 -n 100    # HTTP协议
-./benchmark -protocol grpc -url localhost:9090 -n 100            # gRPC协议
-./benchmark -protocol ws -url http://localhost:8080 -n 100       # WebSocket协议
+# Use different protocols
+./benchmark -protocol http -url http://localhost:8080 -n 100    # HTTP protocol
+./benchmark -protocol grpc -url localhost:9090 -n 100            # gRPC protocol
+./benchmark -protocol ws -url http://localhost:8080 -n 100       # WebSocket protocol
 
-# 运行特定测试
-./benchmark -test compute -n 100      # 简单文本翻译
-./benchmark -test html -n 100         # HTML翻译
-./benchmark -test long -n 100         # 长文本翻译
-./benchmark -test parallel -c 10 -n 100  # 并发翻译测试
+# Run specific tests
+./benchmark -test compute -n 100      # Simple text translation
+./benchmark -test html -n 100         # HTML translation
+./benchmark -test long -n 100         # Long text translation
+./benchmark -test parallel -c 10 -n 100  # Concurrent translation test
 ```
 
-### 参数说明
+### Parameter Description
 
-- `-url string`: 服务器URL（默认：`http://localhost:8080`）
-  - HTTP协议：`http://localhost:8080`
-  - gRPC协议：`localhost:9090`（主机:端口格式）
-  - WebSocket协议：`http://localhost:8080`（自动转换为ws://）
-- `-protocol string`: 通信协议（默认：`http`）
+- `-url string`: Server URL (default: `http://localhost:8080`)
+  - HTTP protocol: `http://localhost:8080`
+  - gRPC protocol: `localhost:9090` (host:port format)
+  - WebSocket protocol: `http://localhost:8080` (automatically converted to ws://)
+- `-protocol string`: Communication protocol (default: `http`)
   - `http`: HTTP REST API
-  - `grpc`: gRPC 协议
-  - `ws`: WebSocket 协议
-- `-model string`: 模型目录路径（默认：`./models/enzh`）
-- `-n int`: 迭代次数（默认：`100`）
-- `-c int`: 并发工作线程数（默认：`1`）
-- `-test string`: 测试类型（默认：`all`）
-  - `all`: 运行所有测试
-  - `compute`: 简单文本翻译测试
-  - `html`: HTML翻译测试
-  - `long`: 长文本翻译测试
-  - `parallel`: 并发翻译测试
+  - `grpc`: gRPC protocol
+  - `ws`: WebSocket protocol
+- `-model string`: Model directory path (default: `./models/enzh`)
+- `-n int`: Number of iterations (default: `100`)
+- `-c int`: Number of concurrent workers (default: `1`)
+- `-test string`: Test type (default: `all`)
+  - `all`: Run all tests
+  - `compute`: Simple text translation test
+  - `html`: HTML translation test
+  - `long`: Long text translation test
+  - `parallel`: Concurrent translation test
 
-## 输出示例
+## Output Example
 
 ```
 === Benchmark Configuration ===
@@ -78,33 +78,36 @@ Max Latency:     89.56ms
 Throughput:      19.11 req/s
 ```
 
-## 性能指标说明
+## Performance Metrics Description
 
-- **Total Requests**: 总请求数
-- **Successful**: 成功的请求数
-- **Failed**: 失败的请求数
-- **Duration**: 测试总耗时
-- **Avg Latency**: 平均延迟
-- **Min Latency**: 最小延迟
-- **Max Latency**: 最大延迟
-- **Throughput**: 吞吐量（请求/秒）
+- **Total Requests**: Total number of requests
+- **Successful**: Number of successful requests
+- **Failed**: Number of failed requests
+- **Duration**: Total test duration
+- **Avg Latency**: Average latency
+- **Min Latency**: Minimum latency
+- **Max Latency**: Maximum latency
+- **Throughput**: Throughput (requests/second)
 
-## 协议说明
+## Protocol Description
 
-### HTTP 协议
-标准的 REST API，适合大多数场景。
+### HTTP Protocol
 
-### gRPC 协议
-基于 HTTP/2 的高性能 RPC 框架，适合低延迟场景。
+Standard REST API, suitable for most scenarios.
 
-### WebSocket 协议
-全双工通信，适合需要持久连接的场景。
+### gRPC Protocol
 
-## 注意事项
+High-performance RPC framework based on HTTP/2, suitable for low-latency scenarios.
 
-1. 确保服务器已启动并可访问
-2. 确保模型文件存在于指定路径
-3. 首次运行会自动加载引擎，需要一些时间
-4. 并发测试（`-c > 1`）可能对系统资源要求较高
-5. 使用 gRPC 时，URL 参数应为 `host:port` 格式
-6. 使用 WebSocket 时，工具会自动将 HTTP URL 转换为 WS URL
+### WebSocket Protocol
+
+Full-duplex communication, suitable for scenarios requiring persistent connections.
+
+## Notes
+
+1. Ensure the server is started and accessible
+2. Ensure model files exist at the specified path
+3. First run will automatically load the engine, which takes some time
+4. Concurrent tests (`-c > 1`) may require higher system resources
+5. When using gRPC, the URL parameter should be in `host:port` format
+6. When using WebSocket, the tool automatically converts HTTP URL to WS URL

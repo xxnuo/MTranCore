@@ -1,76 +1,76 @@
-# Stress Test Tool - 压力测试工具
+# Stress Test Tool
 
-用于对 MTranCore 翻译服务器进行压力测试和负载测试。
+A tool for stress testing and load testing the MTranCore translation server.
 
-## 编译
+## Build
 
 ```bash
 cd /home/xxnuo/projects/MTranCore
 go build -o stresstest ./cmd/stresstest
 ```
 
-## 使用方法
+## Usage
 
-### 基本用法
+### Basic Usage
 
 ```bash
-# 运行所有压力测试（默认，使用HTTP协议）
+# Run all stress tests (default, using HTTP protocol)
 ./stresstest -url http://localhost:8080 -model ./models/enzh
 
-# 使用不同的协议
-./stresstest -protocol http -url http://localhost:8080    # HTTP协议
-./stresstest -protocol grpc -url localhost:9090           # gRPC协议
-./stresstest -protocol ws -url http://localhost:8080      # WebSocket协议
+# Use different protocols
+./stresstest -protocol http -url http://localhost:8080    # HTTP protocol
+./stresstest -protocol grpc -url localhost:9090           # gRPC protocol
+./stresstest -protocol ws -url http://localhost:8080      # WebSocket protocol
 
-# 运行特定测试
-./stresstest -test concurrency -c 50     # 高并发测试
-./stresstest -test sustained -d 30s      # 持续负载测试
-./stresstest -test memory -n 1000        # 内存稳定性测试
-./stresstest -test reload -r 5           # 快速重载测试
-./stresstest -test mixed                 # 混合工作负载测试
+# Run specific tests
+./stresstest -test concurrency -c 50     # High concurrency test
+./stresstest -test sustained -d 30s      # Sustained load test
+./stresstest -test memory -n 1000        # Memory stability test
+./stresstest -test reload -r 5           # Rapid reload test
+./stresstest -test mixed                 # Mixed workload test
 ```
 
-### 参数说明
+### Parameter Description
 
-- `-url string`: 服务器URL（默认：`http://localhost:8080`）
-  - HTTP协议：`http://localhost:8080`
-  - gRPC协议：`localhost:9090`（主机:端口格式）
-  - WebSocket协议：`http://localhost:8080`（自动转换为ws://）
-- `-protocol string`: 通信协议（默认：`http`）
+- `-url string`: Server URL (default: `http://localhost:8080`)
+  - HTTP protocol: `http://localhost:8080`
+  - gRPC protocol: `localhost:9090` (host:port format)
+  - WebSocket protocol: `http://localhost:8080` (automatically converted to ws://)
+- `-protocol string`: Communication protocol (default: `http`)
   - `http`: HTTP REST API
-  - `grpc`: gRPC 协议
-  - `ws`: WebSocket 协议
-- `-model string`: 模型目录路径（默认：`./models/enzh`）
-- `-test string`: 测试类型（默认：`all`）
-  - `all`: 运行所有测试
-  - `concurrency`: 高并发测试
-  - `sustained`: 持续负载测试
-  - `memory`: 内存稳定性测试
-  - `reload`: 快速引擎重载测试
-  - `mixed`: 混合工作负载测试
-- `-c int`: 高并发测试的并发工作线程数（默认：`50`）
-- `-d duration`: 持续负载测试的持续时间（默认：`30s`）
-- `-n int`: 内存稳定性测试的迭代次数（默认：`1000`）
-- `-r int`: 快速重载测试的重载次数（默认：`5`）
+  - `grpc`: gRPC protocol
+  - `ws`: WebSocket protocol
+- `-model string`: Model directory path (default: `./models/enzh`)
+- `-test string`: Test type (default: `all`)
+  - `all`: Run all tests
+  - `concurrency`: High concurrency test
+  - `sustained`: Sustained load test
+  - `memory`: Memory stability test
+  - `reload`: Rapid engine reload test
+  - `mixed`: Mixed workload test
+- `-c int`: Number of concurrent workers for high concurrency test (default: `50`)
+- `-d duration`: Duration for sustained load test (default: `30s`)
+- `-n int`: Number of iterations for memory stability test (default: `1000`)
+- `-r int`: Number of reloads for rapid reload test (default: `5`)
 
-## 测试类型说明
+## Test Type Descriptions
 
-### 1. High Concurrency Test（高并发测试）
-测试服务器在高并发负载下的表现，同时发起大量并发请求。
+### 1. High Concurrency Test
+Tests server performance under high concurrent load by sending many concurrent requests simultaneously.
 
-### 2. Sustained Load Test（持续负载测试）
-在指定时间内保持恒定负载，测试服务器的稳定性和持续性能。
+### 2. Sustained Load Test
+Maintains constant load for a specified time to test server stability and sustained performance.
 
-### 3. Memory Stability Test（内存稳定性测试）
-通过大量迭代检测潜在的内存泄漏问题。
+### 3. Memory Stability Test
+Detects potential memory leaks through numerous iterations.
 
-### 4. Rapid Reload Test（快速重载测试）
-测试引擎快速加载和卸载的稳定性。
+### 4. Rapid Reload Test
+Tests stability of rapid engine loading and unloading.
 
-### 5. Mixed Workload Test（混合工作负载测试）
-模拟真实场景，混合翻译请求、健康检查和就绪检查。
+### 5. Mixed Workload Test
+Simulates real scenarios with mixed translation requests, health checks, and ready checks.
 
-## 输出示例
+## Output Example
 
 ```
 === Stress Test Configuration ===
@@ -98,63 +98,63 @@ Concurrent Load: 50 workers
 ✓ Acceptable failure rate (<10%)
 ```
 
-## 性能指标说明
+## Performance Metrics Description
 
-- **Total Requests**: 总请求数
-- **Successful**: 成功的请求数
-- **Failed**: 失败的请求数
-- **Duration**: 测试总耗时
-- **Throughput**: 吞吐量（请求/秒）
-- **Failure Rate**: 失败率
-- **Concurrent Load**: 并发负载（工作线程数）
+- **Total Requests**: Total number of requests
+- **Successful**: Number of successful requests
+- **Failed**: Number of failed requests
+- **Duration**: Total test duration
+- **Throughput**: Throughput (requests/second)
+- **Failure Rate**: Failure rate
+- **Concurrent Load**: Concurrent load (number of workers)
 
-## 评估标准
+## Evaluation Criteria
 
-- ✅ **Excellent**: 失败率 = 0%
-- ✓ **Acceptable**: 失败率 < 10%
-- ⚠️ **Warning**: 失败率 ≥ 10%
+- ✅ **Excellent**: Failure rate = 0%
+- ✓ **Acceptable**: Failure rate < 10%
+- ⚠️ **Warning**: Failure rate ≥ 10%
 
-## 协议说明
+## Protocol Description
 
-### HTTP 协议
-标准的 REST API，适合大多数场景。
+### HTTP Protocol
+Standard REST API, suitable for most scenarios.
 
-### gRPC 协议
-基于 HTTP/2 的高性能 RPC 框架，适合低延迟场景和高并发压力测试。
+### gRPC Protocol
+High-performance RPC framework based on HTTP/2, suitable for low-latency scenarios and high-concurrency stress testing.
 
-### WebSocket 协议
-全双工通信，适合需要持久连接的场景。注意：WebSocket 连接在测试过程中保持打开状态。
+### WebSocket Protocol
+Full-duplex communication, suitable for scenarios requiring persistent connections. Note: WebSocket connections remain open during testing.
 
-## 注意事项
+## Notes
 
-1. 确保服务器已启动并可访问
-2. 确保模型文件存在于指定路径
-3. 压力测试可能对系统资源要求很高，建议在测试环境运行
-4. 持续负载测试和混合工作负载测试会实时显示进度
-5. 建议根据服务器配置调整并发数和测试时长
-6. 运行所有测试（`-test all`）可能需要较长时间
-7. 使用 gRPC 时，URL 参数应为 `host:port` 格式
-8. 使用 WebSocket 时，工具会自动将 HTTP URL 转换为 WS URL
-9. WebSocket 协议下的并发测试会共享一个连接，可能影响测试结果
+1. Ensure the server is started and accessible
+2. Ensure model files exist at the specified path
+3. Stress testing may require significant system resources; recommended to run in a test environment
+4. Sustained load and mixed workload tests display real-time progress
+5. Adjust concurrency and test duration based on server configuration
+6. Running all tests (`-test all`) may take a considerable amount of time
+7. When using gRPC, the URL parameter should be in `host:port` format
+8. When using WebSocket, the tool automatically converts HTTP URL to WS URL
+9. Under WebSocket protocol, concurrent tests share a single connection, which may affect test results
 
-## 示例场景
+## Example Scenarios
 
-### 快速检查服务器性能
+### Quick Server Performance Check
 ```bash
 ./stresstest -test concurrency -c 20
 ```
 
-### 长时间稳定性测试
+### Long-term Stability Test
 ```bash
 ./stresstest -test sustained -d 5m
 ```
 
-### 内存泄漏检测
+### Memory Leak Detection
 ```bash
 ./stresstest -test memory -n 5000
 ```
 
-### 全面压力测试
+### Comprehensive Stress Test
 ```bash
 ./stresstest -test all
 ```
