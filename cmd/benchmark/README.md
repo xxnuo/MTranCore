@@ -15,12 +15,12 @@ go build -o benchmark ./cmd/benchmark
 
 ```bash
 # Run all benchmarks (default, using HTTP protocol)
-./benchmark -url http://localhost:8080 -model ./models/enzh -n 100
+./benchmark -url http://localhost:8988 -model ./models/enzh -n 100
 
 # Use different protocols
-./benchmark -protocol http -url http://localhost:8080 -n 100    # HTTP protocol
+./benchmark -protocol http -url http://localhost:8988 -n 100    # HTTP protocol
 ./benchmark -protocol grpc -url localhost:9090 -n 100            # gRPC protocol
-./benchmark -protocol ws -url http://localhost:8080 -n 100       # WebSocket protocol
+./benchmark -protocol ws -url http://localhost:8988 -n 100       # WebSocket protocol
 
 # Run specific tests
 ./benchmark -test compute -n 100      # Simple text translation
@@ -31,10 +31,10 @@ go build -o benchmark ./cmd/benchmark
 
 ### Parameter Description
 
-- `-url string`: Server URL (default: `http://localhost:8080`)
-  - HTTP protocol: `http://localhost:8080`
+- `-url string`: Server URL (default: `http://localhost:8988`)
+  - HTTP protocol: `http://localhost:8988`
   - gRPC protocol: `localhost:9090` (host:port format)
-  - WebSocket protocol: `http://localhost:8080` (automatically converted to ws://)
+  - WebSocket protocol: `http://localhost:8988` (automatically converted to ws://)
 - `-protocol string`: Communication protocol (default: `http`)
   - `http`: HTTP REST API
   - `grpc`: gRPC protocol
@@ -53,7 +53,7 @@ go build -o benchmark ./cmd/benchmark
 
 ```
 === Benchmark Configuration ===
-Server URL: http://localhost:8080
+Server URL: http://localhost:8988
 Protocol: http
 Model Path: /path/to/models/enzh
 Iterations: 100
