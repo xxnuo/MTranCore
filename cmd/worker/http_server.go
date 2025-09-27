@@ -18,7 +18,7 @@ import (
 type Server struct {
 	app            *fiber.App
 	translator     *engine.Translator
-	loadedFiles    *LoadedFiles
+	loadedFiles    *engine.LoadedFiles
 	queue          *TranslationQueue // Request queue for sequential processing
 	mu             sync.RWMutex
 	shutdownCh     chan struct{}
@@ -140,8 +140,8 @@ func (s *Server) poweron(c fiber.Ctx) error {
 
 	// Create translator using model directory
 	ctx := context.Background()
-	config := EngineConfig{ModelDir: fullPath}
-	translator, loadedFiles, err := CreateTranslator(ctx, config)
+	config := engine.EngineConfig{ModelDir: fullPath}
+	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
 	if err != nil {
 		// Determine error code based on error message
 		errMsg := err.Error()

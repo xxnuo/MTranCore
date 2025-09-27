@@ -20,7 +20,7 @@ import (
 type GRPCServer struct {
 	pb.UnimplementedTranslatorServiceServer
 	translator     *engine.Translator
-	loadedFiles    *LoadedFiles
+	loadedFiles    *engine.LoadedFiles
 	mu             sync.RWMutex
 	config         *Config
 	activeStreams  int32 // atomic counter for active streams
@@ -85,8 +85,8 @@ func (g *GRPCServer) Poweron(ctx context.Context, req *pb.PoweronRequest) (*pb.P
 	}
 
 	// Create translator using model directory
-	config := EngineConfig{ModelDir: fullPath}
-	translator, loadedFiles, err := CreateTranslator(ctx, config)
+	config := engine.EngineConfig{ModelDir: fullPath}
+	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
 	if err != nil {
 		// Determine error code based on error message
 		errMsg := err.Error()
