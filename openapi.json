@@ -76,13 +76,13 @@
                 "relative_path": {
                   "summary": "Relative path example",
                   "value": {
-                    "path": "models/en-zh"
+                    "path": "models/enzh"
                   }
                 },
                 "absolute_path": {
                   "summary": "Absolute path example",
                   "value": {
-                    "path": "/usr/share/bergamot/models/en-zh"
+                    "path": "/usr/share/bergamot/models/enzh"
                   }
                 }
               }
@@ -633,7 +633,7 @@
           "path": {
             "type": "string",
             "description": "Path to model directory. Can be absolute or relative to work directory.",
-            "example": "models/en-zh"
+            "example": "models/enzh"
           }
         }
       },
@@ -841,7 +841,7 @@
           {
             "type": "poweron",
             "data": {
-              "path": "models/en-zh"
+              "path": "models/enzh"
             }
           },
           {

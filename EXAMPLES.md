@@ -15,7 +15,7 @@ curl http://localhost:8988/health
 ```bash
 curl -X POST http://localhost:8988/poweron \
   -H "Content-Type: application/json" \
-  -d '{"path": "models/en-zh"}'
+  -d '{"path": "models/enzh"}'
 ```
 
 ### 3. Check Ready Status
@@ -59,7 +59,7 @@ grpcurl -plaintext localhost:8988 translator.TranslatorService/Health
 ### 2. Load Translation Engine
 
 ```bash
-grpcurl -plaintext -d '{"path": "models/en-zh"}' \
+grpcurl -plaintext -d '{"path": "models/enzh"}' \
   localhost:8988 translator.TranslatorService/Poweron
 ```
 
@@ -106,7 +106,7 @@ ws.onopen = () => {
   // 1. Load Engine
   ws.send(JSON.stringify({
     type: 'poweron',
-    data: { path: 'models/en-zh' }
+    data: { path: 'models/enzh' }
   }));
 };
 
@@ -166,7 +166,7 @@ async def translate():
         # 1. Load Engine
         await websocket.send(json.dumps({
             "type": "poweron",
-            "data": {"path": "models/en-zh"}
+            "data": {"path": "models/enzh"}
         }))
         response = json.loads(await websocket.recv())
         print("Poweron response:", response)
@@ -209,7 +209,7 @@ wscat -c ws://localhost:8988/ws
 # Send messages after connection:
 
 # 1. Load Engine
-> {"type":"poweron","data":{"path":"models/en-zh"}}
+> {"type":"poweron","data":{"path":"models/enzh"}}
 
 # 2. Check Ready Status
 > {"type":"ready","data":{}}
@@ -272,7 +272,7 @@ curl http://localhost:8988/health
 # 2. Load Translation Model
 curl -X POST http://localhost:8988/poweron \
   -H "Content-Type: application/json" \
-  -d '{"path": "models/en-zh"}'
+  -d '{"path": "models/enzh"}'
 
 # 3. Wait for Model Loading
 while true; do
