@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package translator;
+
+option go_package = "github.com/xxnuo/MTranCore/proto;proto";
+
+// TranslatorService provides translation capabilities
+service TranslatorService {
+  // Health check
+  rpc Health(HealthRequest) returns (HealthResponse);
+  
+  // Poweron loads the translation engine with model files
+  rpc Poweron(PoweronRequest) returns (PoweronResponse);
+  
+  // Poweroff shuts down the server
+  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
+  
+  // Ready gets the current engine status
+  rpc Ready(ReadyRequest) returns (ReadyResponse);
+  
+  // Compute translates a single text
+  rpc Compute(ComputeRequest) returns (ComputeResponse);
+  
+  // ComputeStream translates multiple texts in streaming fashion
+  rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
+}
+
+// HealthRequest is empty
+message HealthRequest {}
+
+// HealthResponse indicates server health
+message HealthResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// PoweronRequest contains the path to model directory
+message PoweronRequest {
+  string path = 1;
+}
+
+// PoweronResponse indicates whether the engine loaded successfully
+message PoweronResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// PoweroffRequest contains shutdown parameters
+message PoweroffRequest {
+  int32 time = 1;   // seconds to wait before shutdown
+  bool force = 2;   // force shutdown without waiting
+}
+
+// PoweroffResponse indicates shutdown status
+message PoweroffResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// ReadyRequest is empty
+message ReadyRequest {}
+
+// ReadyResponse indicates whether an engine is loaded
+message ReadyResponse {
+  int32 code = 1;
+  string message = 2;
+  bool ready = 3;
+}
+
+// ComputeRequest contains the text to translate
+message ComputeRequest {
+  string text = 1;
+  bool html = 2;
+}
+
+// ComputeResponse contains the translated text
+message ComputeResponse {
+  int32 code = 1;
+  string message = 2;
+  string translated_text = 3;
+}

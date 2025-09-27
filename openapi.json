@@ -1,0 +1,952 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MTranCore Translation Service API",
+    "description": "Translation service supporting HTTP/REST, gRPC, and WebSocket protocols for machine translation using Bergamot engine",
+    "version": "1.0.0",
+    "contact": {
+      "name": "MTranCore",
+      "url": "https://github.com/xxnuo/MTranCore"
+    },
+    "license": {
+      "name": "License",
+      "url": "https://github.com/xxnuo/MTranCore/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:8080",
+      "description": "HTTP/REST API Server"
+    },
+    {
+      "url": "http://localhost:8081",
+      "description": "gRPC Server"
+    },
+    {
+      "url": "ws://localhost:8082",
+      "description": "WebSocket Server"
+    }
+  ],
+  "tags": [
+    {
+      "name": "HTTP",
+      "description": "HTTP/REST API endpoints"
+    },
+    {
+      "name": "gRPC",
+      "description": "gRPC service methods"
+    },
+    {
+      "name": "WebSocket",
+      "description": "WebSocket protocol messages"
+    },
+    {
+      "name": "Health",
+      "description": "Health check endpoints"
+    },
+    {
+      "name": "Lifecycle",
+      "description": "Engine lifecycle management (poweron/poweroff)"
+    },
+    {
+      "name": "Translation",
+      "description": "Translation operations"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["HTTP", "Health"],
+        "summary": "Health check (HTTP)",
+        "description": "Check if the HTTP server is running",
+        "operationId": "healthHttp",
+        "responses": {
+          "200": {
+            "description": "Server is healthy"
+          }
+        }
+      }
+    },
+    "/poweron": {
+      "post": {
+        "tags": ["HTTP", "Lifecycle"],
+        "summary": "Power on engine (HTTP)",
+        "description": "Load the translation engine with model files from specified path",
+        "operationId": "poweronHttp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoweronRequest"
+              },
+              "examples": {
+                "relative_path": {
+                  "summary": "Relative path example",
+                  "value": {
+                    "path": "models/en-zh"
+                  }
+                },
+                "absolute_path": {
+                  "summary": "Absolute path example",
+                  "value": {
+                    "path": "/usr/share/bergamot/models/en-zh"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Success or error response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Engine loaded successfully",
+                    "value": {
+                      "code": 0,
+                      "data": {
+                        "message": "Engine loaded successfully"
+                      }
+                    }
+                  },
+                  "path_not_exists": {
+                    "summary": "Path does not exist",
+                    "value": {
+                      "code": 1001,
+                      "message": "path does not exist: /invalid/path"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/poweroff": {
+      "post": {
+        "tags": ["HTTP", "Lifecycle"],
+        "summary": "Power off server (HTTP)",
+        "description": "Gracefully shut down the server with optional delay and force flag",
+        "operationId": "poweroffHttp",
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoweroffRequest"
+              },
+              "examples": {
+                "immediate": {
+                  "summary": "Immediate shutdown",
+                  "value": {
+                    "time": 0,
+                    "force": false
+                  }
+                },
+                "delayed": {
+                  "summary": "Delayed shutdown (5 seconds)",
+                  "value": {
+                    "time": 5,
+                    "force": false
+                  }
+                },
+                "force": {
+                  "summary": "Force shutdown",
+                  "value": {
+                    "time": 0,
+                    "force": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Shutdown initiated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["HTTP", "Lifecycle"],
+        "summary": "Check engine ready status (HTTP)",
+        "description": "Check if the translation engine is loaded and ready to process requests",
+        "operationId": "readyHttp",
+        "responses": {
+          "200": {
+            "description": "Ready status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/StandardResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ReadyResponse"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "ready": {
+                    "summary": "Engine is ready",
+                    "value": {
+                      "code": 0,
+                      "data": {
+                        "ready": true
+                      }
+                    }
+                  },
+                  "not_ready": {
+                    "summary": "Engine is not ready",
+                    "value": {
+                      "code": 0,
+                      "data": {
+                        "ready": false
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/compute": {
+      "post": {
+        "tags": ["HTTP", "Translation"],
+        "summary": "Translate text (HTTP)",
+        "description": "Translate text using the loaded translation engine",
+        "operationId": "computeHttp",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeRequest"
+              },
+              "examples": {
+                "plain_text": {
+                  "summary": "Plain text translation",
+                  "value": {
+                    "text": "Hello, world!",
+                    "html": false
+                  }
+                },
+                "html_text": {
+                  "summary": "HTML text translation",
+                  "value": {
+                    "text": "<p>Hello, <strong>world</strong>!</p>",
+                    "html": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Translation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/StandardResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "data": {
+                          "$ref": "#/components/schemas/ComputeResponse"
+                        }
+                      }
+                    }
+                  ]
+                },
+                "examples": {
+                  "success": {
+                    "summary": "Successful translation",
+                    "value": {
+                      "code": 0,
+                      "data": {
+                        "translated_text": "你好，世界！"
+                      }
+                    }
+                  },
+                  "engine_not_ready": {
+                    "summary": "Engine not ready",
+                    "value": {
+                      "code": 1200,
+                      "message": "Engine is not ready. Please call poweron first"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Translation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Server is shutting down",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/Health": {
+      "post": {
+        "tags": ["gRPC", "Health"],
+        "summary": "Health check (gRPC)",
+        "description": "gRPC health check method",
+        "operationId": "healthGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Health response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/Poweron": {
+      "post": {
+        "tags": ["gRPC", "Lifecycle"],
+        "summary": "Power on engine (gRPC)",
+        "description": "Load the translation engine with model files",
+        "operationId": "poweronGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoweronRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Poweron response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoweronResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/Poweroff": {
+      "post": {
+        "tags": ["gRPC", "Lifecycle"],
+        "summary": "Power off server (gRPC)",
+        "description": "Shut down the gRPC server",
+        "operationId": "poweroffGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PoweroffRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Poweroff response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PoweroffResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/Ready": {
+      "post": {
+        "tags": ["gRPC", "Lifecycle"],
+        "summary": "Check engine ready status (gRPC)",
+        "description": "Get the current engine status",
+        "operationId": "readyGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {}
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ready response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadyResponseGrpc"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/Compute": {
+      "post": {
+        "tags": ["gRPC", "Translation"],
+        "summary": "Translate text (gRPC)",
+        "description": "Translate a single text using gRPC",
+        "operationId": "computeGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComputeRequestGrpc"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Compute response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComputeResponseGrpc"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/grpc/TranslatorService/ComputeStream": {
+      "post": {
+        "tags": ["gRPC", "Translation"],
+        "summary": "Translate text stream (gRPC)",
+        "description": "Translate multiple texts in streaming fashion using bidirectional gRPC stream",
+        "operationId": "computeStreamGrpc",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Stream of ComputeRequest messages",
+                "properties": {
+                  "stream": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/ComputeRequestGrpc"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Stream of compute responses",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "stream": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ComputeResponseGrpc"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ws": {
+      "get": {
+        "tags": ["WebSocket"],
+        "summary": "WebSocket endpoint",
+        "description": "WebSocket connection endpoint for bidirectional communication. Supports poweron, poweroff, ready, and compute message types.",
+        "operationId": "websocketConnect",
+        "parameters": [
+          {
+            "name": "Connection",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["Upgrade"]
+            }
+          },
+          {
+            "name": "Upgrade",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["websocket"]
+            }
+          }
+        ],
+        "responses": {
+          "101": {
+            "description": "Switching Protocols - WebSocket connection established",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/WSResponse"
+                    }
+                  ]
+                },
+                "examples": {
+                  "poweron_success": {
+                    "summary": "Poweron success response",
+                    "value": {
+                      "type": "poweron",
+                      "code": 0,
+                      "msg": "success",
+                      "data": {
+                        "message": "Engine loaded successfully"
+                      }
+                    }
+                  },
+                  "compute_success": {
+                    "summary": "Compute success response",
+                    "value": {
+                      "type": "compute",
+                      "code": 0,
+                      "msg": "success",
+                      "data": {
+                        "translated_text": "你好，世界！"
+                      }
+                    }
+                  },
+                  "ready_response": {
+                    "summary": "Ready status response",
+                    "value": {
+                      "type": "ready",
+                      "code": 0,
+                      "msg": "success",
+                      "data": {
+                        "ready": true
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "426": {
+            "description": "Upgrade Required - Not a WebSocket request"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "PoweronRequest": {
+        "type": "object",
+        "required": ["path"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Path to model directory. Can be absolute or relative to work directory.",
+            "example": "models/en-zh"
+          }
+        }
+      },
+      "PoweroffRequest": {
+        "type": "object",
+        "properties": {
+          "time": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Seconds to wait before shutdown",
+            "default": 0,
+            "minimum": 0,
+            "example": 5
+          },
+          "force": {
+            "type": "boolean",
+            "description": "Force shutdown without waiting for requests",
+            "default": false,
+            "example": false
+          }
+        }
+      },
+      "ComputeRequest": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to translate",
+            "example": "Hello, world!"
+          },
+          "html": {
+            "type": "boolean",
+            "description": "Whether the text contains HTML markup",
+            "default": false,
+            "example": false
+          }
+        }
+      },
+      "ComputeRequestGrpc": {
+        "type": "object",
+        "required": ["text"],
+        "properties": {
+          "text": {
+            "type": "string",
+            "description": "Text to translate"
+          },
+          "html": {
+            "type": "boolean",
+            "description": "Whether the text contains HTML markup",
+            "default": false
+          }
+        }
+      },
+      "ComputeResponse": {
+        "type": "object",
+        "properties": {
+          "translated_text": {
+            "type": "string",
+            "description": "Translated text",
+            "example": "你好，世界！"
+          }
+        }
+      },
+      "ReadyResponse": {
+        "type": "object",
+        "properties": {
+          "ready": {
+            "type": "boolean",
+            "description": "Whether the engine is ready",
+            "example": true
+          }
+        }
+      },
+      "StandardResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "description": "Response code (0 for success, non-zero for errors)",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "description": "Response message (usually present for errors)",
+            "example": "Success"
+          },
+          "data": {
+            "type": "object",
+            "description": "Response data (present for successful requests)",
+            "additionalProperties": true
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "OK"
+          }
+        }
+      },
+      "PoweronResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "Engine loaded successfully"
+          }
+        }
+      },
+      "PoweroffResponse": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "Server is shutting down"
+          }
+        }
+      },
+      "ReadyResponseGrpc": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "OK"
+          },
+          "ready": {
+            "type": "boolean",
+            "example": true
+          }
+        }
+      },
+      "ComputeResponseGrpc": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "integer",
+            "format": "int32",
+            "example": 0
+          },
+          "message": {
+            "type": "string",
+            "example": "OK"
+          },
+          "translated_text": {
+            "type": "string",
+            "example": "你好，世界！"
+          }
+        }
+      },
+      "WSMessage": {
+        "type": "object",
+        "description": "WebSocket request message",
+        "required": ["type"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["poweron", "poweroff", "ready", "compute"],
+            "description": "Message type",
+            "example": "compute"
+          },
+          "data": {
+            "type": "object",
+            "description": "Message data, structure depends on type",
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PoweronRequest"
+              },
+              {
+                "$ref": "#/components/schemas/PoweroffRequest"
+              },
+              {
+                "$ref": "#/components/schemas/ComputeRequest"
+              },
+              {
+                "type": "object",
+                "description": "Empty object for ready message"
+              }
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "poweron",
+            "data": {
+              "path": "models/en-zh"
+            }
+          },
+          {
+            "type": "compute",
+            "data": {
+              "text": "Hello, world!",
+              "html": false
+            }
+          },
+          {
+            "type": "ready",
+            "data": {}
+          }
+        ]
+      },
+      "WSResponse": {
+        "type": "object",
+        "description": "WebSocket response message",
+        "required": ["type", "code", "msg"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "description": "Same as request type",
+            "example": "compute"
+          },
+          "code": {
+            "type": "integer",
+            "description": "Response code (0 for success)",
+            "example": 0
+          },
+          "msg": {
+            "type": "string",
+            "description": "Response message",
+            "example": "success"
+          },
+          "data": {
+            "type": "object",
+            "description": "Response data (optional)",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ErrorCodes": {
+        "type": "object",
+        "description": "Standard error codes used across all protocols",
+        "properties": {
+          "0": {
+            "type": "string",
+            "description": "Success",
+            "example": "Success"
+          },
+          "1000": {
+            "type": "string",
+            "description": "Poweron: Invalid parameters"
+          },
+          "1001": {
+            "type": "string",
+            "description": "Poweron: Path does not exist"
+          },
+          "1002": {
+            "type": "string",
+            "description": "Poweron: Incomplete model files"
+          },
+          "1003": {
+            "type": "string",
+            "description": "Poweron: Internal error"
+          },
+          "1009": {
+            "type": "string",
+            "description": "Poweron: Unknown error"
+          },
+          "1100": {
+            "type": "string",
+            "description": "Poweroff: Invalid parameters"
+          },
+          "1101": {
+            "type": "string",
+            "description": "Poweroff: Waiting for tasks to complete"
+          },
+          "1109": {
+            "type": "string",
+            "description": "Poweroff: Internal error"
+          },
+          "1200": {
+            "type": "string",
+            "description": "Compute: Invalid parameters"
+          },
+          "1201": {
+            "type": "string",
+            "description": "Compute: Translation failure"
+          },
+          "1209": {
+            "type": "string",
+            "description": "Compute: Internal error"
+          }
+        }
+      }
+    }
+  }
+}
