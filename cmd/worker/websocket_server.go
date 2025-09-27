@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	fiberlog "github.com/gofiber/fiber/v3/log"
 	"github.com/kiuber/gofiber3-contrib/websocket"
 
 	engine "github.com/xxnuo/MTranCore/engine"
@@ -45,6 +46,15 @@ type WSResponse struct {
 
 // NewWebSocketServer creates a new WebSocket server instance
 func NewWebSocketServer(cfg *Config) *WebSocketServer {
+	// Redirect Fiber's log output to our standard logger
+	if globalLogger != nil {
+		fiberLogger := globalLogger.GetWriter(LogLevelInfo)
+		fiberlog.SetOutput(fiberLogger)
+	} else {
+		// Discard Fiber logs if no logger is set
+		fiberlog.SetOutput(io.Discard)
+	}
+
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -62,7 +72,7 @@ func NewWebSocketServer(cfg *Config) *WebSocketServer {
 		queue:      NewTranslationQueue(), // Initialize translation queue
 	}
 
-	// Suppress Fiber's default logger output before any routes
+	// Suppress Fiber's server logger output
 	app.Server().Logger = &DiscardLogger{}
 
 	// WebSocket upgrade middleware
@@ -401,16 +411,17 @@ func (s *WebSocketServer) Close() error {
 
 // Listen starts the WebSocket server
 func (s *WebSocketServer) Listen(addr string) error {
-	// Fiber prints startup info to stdout, suppress it
-	// by temporarily redirecting stdout
+	// Temporarily redirect stdout to suppress Fiber's startup banner
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	// Start listening (this triggers Fiber's startup messages)
+	// Start listening in a goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.app.Listen(addr)
+		errCh <- s.app.Listen(addr, fiber.ListenConfig{
+			DisableStartupMessage: true,
+		})
 	}()
 
 	// Wait a bit for startup messages to be written
@@ -424,6 +435,6 @@ func (s *WebSocketServer) Listen(addr string) error {
 	io.Copy(io.Discard, r)
 	r.Close()
 
-	// Wait for and return any error
+	// Return any error
 	return <-errCh
 }

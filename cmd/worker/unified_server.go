@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v3"
+	fiberlog "github.com/gofiber/fiber/v3/log"
 	"github.com/kiuber/gofiber3-contrib/websocket"
 
 	engine "github.com/xxnuo/MTranCore/engine"
@@ -37,6 +38,15 @@ type UnifiedServer struct {
 
 // NewUnifiedServer creates a new unified server instance
 func NewUnifiedServer(cfg *Config) *UnifiedServer {
+	// Redirect Fiber's log output to our standard logger
+	if globalLogger != nil {
+		fiberLogger := globalLogger.GetWriter(LogLevelInfo)
+		fiberlog.SetOutput(fiberLogger)
+	} else {
+		// Discard Fiber logs if no logger is set
+		fiberlog.SetOutput(io.Discard)
+	}
+
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
@@ -54,7 +64,7 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 		queue:      NewTranslationQueue(),
 	}
 
-	// Suppress Fiber's default logger output
+	// Suppress Fiber's server logger output
 	app.Server().Logger = &DiscardLogger{}
 
 	// HTTP Routes (if enabled)
@@ -584,22 +594,30 @@ func (s *UnifiedServer) Close() error {
 
 // Listen starts the unified server (HTTP/WebSocket only, gRPC handled separately)
 func (s *UnifiedServer) Listen(addr string) error {
+	// Temporarily redirect stdout to suppress Fiber's startup banner
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
+	// Start listening in a goroutine
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- s.app.Listen(addr)
+		errCh <- s.app.Listen(addr, fiber.ListenConfig{
+			DisableStartupMessage: true,
+		})
 	}()
 
+	// Wait a bit for startup messages to be written
 	time.Sleep(100 * time.Millisecond)
 
+	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
 
+	// Discard the captured output
 	io.Copy(io.Discard, r)
 	r.Close()
 
+	// Return any error
 	return <-errCh
 }

@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/soheilhy/cmux"
@@ -125,12 +127,37 @@ func main() {
 				Debug("  - poweroff - Shutdown server")
 				Debug("  - ready    - Check engine status")
 				Debug("  - compute  - Translate text")
-			}
+		}
 
-			// Use the HTTP listener from cmux
-			if err := unifiedServer.app.Listener(httpListener, fiber.ListenConfig{}); err != nil {
-				Error("[HTTP/WebSocket] Server error: %v", err)
-			}
+		// Use the HTTP listener from cmux
+		// Temporarily redirect stdout to suppress Fiber's startup banner
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Start listening
+		errCh := make(chan error, 1)
+		go func() {
+			errCh <- unifiedServer.app.Listener(httpListener, fiber.ListenConfig{
+				DisableStartupMessage: true,
+			})
+		}()
+
+		// Wait a bit for startup messages to be written
+		time.Sleep(100 * time.Millisecond)
+
+		// Restore stdout
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Discard the captured output
+		io.Copy(io.Discard, r)
+		r.Close()
+
+		// Get any error
+		if err := <-errCh; err != nil {
+			Error("[HTTP/WebSocket] Server error: %v", err)
+		}
 		}()
 	}
 
