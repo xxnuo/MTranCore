@@ -6,7 +6,7 @@ update-wasm:
 	mkdir -p data
 	curl -L -o data/translations-wasm.json https://github.com/mozilla-firefox/firefox/raw/refs/heads/main/services/settings/dumps/main/translations-wasm.json
 	filepath=$$(cat data/translations-wasm.json | jq -r '.data[0].attachment.location'); \
-	curl -L -o internal/wasm/bergamot-translator-worker.wasm https://firefox-settings-attachments.cdn.mozilla.net/$$filepath
+	echo curl -L -o internal/wasm/bergamot-translator-worker.wasm https://firefox-settings-attachments.cdn.mozilla.net/$$filepath
 	filehash=$$(cat data/translations-wasm.json | jq -r '.data[0].attachment.hash'); \
 	sha256sum internal/wasm/bergamot-translator-worker.wasm | grep $$filehash || echo "File hash mismatch"
 
