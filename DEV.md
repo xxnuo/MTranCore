@@ -1,64 +1,64 @@
-# Worker 服务定义
+# Worker Service Definition
 
-服务器支持 gRPC 、HTTP 、WebSocket 三种协议，所有服务统一运行在同一个端口上。
+The server supports three protocols: gRPC, HTTP, and WebSocket, all running on the same port.
 
-# 环境变量
+## Environment Variables
 
-- `LOG_LEVEL`: 日志级别，默认 `info`，可选 `debug`、`info`、`warn`、`error`(不区分大小写)。
-- `WROK_DIR`: 工作目录，默认 `./`，主要用于拼接在 poweron 传入的模型目录 path 路径前。
-- `SERVER_HOST`: 服务器主机地址，默认 `0.0.0.0`。
-- `SERVER_PORT`: 服务器统一端口，默认 `8988`，所有启用的服务(HTTP、WebSocket、gRPC)都将运行在此端口上。
-- `ENABLE_HTTP`: 是否启用 HTTP 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
-- `ENABLE_WEBSOCKET`: 是否启用 WebSocket 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
-- `ENABLE_GRPC`: 是否启用 gRPC 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
+- `LOG_LEVEL`: Log level, default `info`, options: `debug`, `info`, `warn`, `error` (case-insensitive).
+- `WORK_DIR`: Working directory, default `./`, mainly used to prepend to the model directory path passed in poweron.
+- `SERVER_HOST`: Server host address, default `0.0.0.0`.
+- `SERVER_PORT`: Unified server port, default `8988`, all enabled services (HTTP, WebSocket, gRPC) will run on this port.
+- `ENABLE_HTTP`: Whether to enable HTTP service, default `true`, options: `true`, `false`, 0, 1, 'yes', 'no' (case-insensitive).
+- `ENABLE_WEBSOCKET`: Whether to enable WebSocket service, default `true`, options: `true`, `false`, 0, 1, 'yes', 'no' (case-insensitive).
+- `ENABLE_GRPC`: Whether to enable gRPC service, default `true`, options: `true`, `false`, 0, 1, 'yes', 'no' (case-insensitive).
 
-## 主要接口定义
+## Main API Definitions
 
-### health - 健康检查
+### health - Health Check
 
-### poweron - 启动
+### poweron - Start
 
-参数：
+Parameters:
 
-- path: 相对于程序工作目录的模型目录路径，需要包含 lex*.bin, model*.bin, vocab*.spm(或 srcvocab*.spm, trgvocab\*.spm) 文件。
+- path: Model directory path relative to the program's working directory, must contain lex*.bin, model*.bin, vocab*.spm (or srcvocab*.spm, trgvocab\*.spm) files.
 
-返回值错误代码定义：
+Error code definitions for return values:
 
-- 0: 成功
-- 1000: 参数错误
-- 1001: 模型目录不存在
-- 1002: 模型文件不完整
-- 1003: 内部错误
-- 1009：未知错误
+- 0: Success
+- 1000: Invalid parameters
+- 1001: Model directory does not exist
+- 1002: Model files incomplete
+- 1003: Internal error
+- 1009: Unknown error
 
-### poweroff - 关闭
+### poweroff - Shutdown
 
-参数：
+Parameters:
 
-- time: 多少秒后关闭服务器
-- force: 是否强制关闭(默认 false，会等待所有请求处理完成)
+- time: How many seconds before shutting down the server
+- force: Whether to force shutdown (default false, will wait for all requests to complete)
 
-返回值错误代码定义：
+Error code definitions for return values:
 
-- 0: 成功
-- 1100: 参数不合法
-- 1101: 等待请求处理完成
-- 1109: 内部错误
+- 0: Success
+- 1100: Invalid parameters
+- 1101: Waiting for requests to complete
+- 1109: Internal error
 
-### ready - 获取状态
+### ready - Get Status
 
-返回是否启动
+Returns whether the service is ready
 
-### compute - 翻译文本
+### compute - Translate Text
 
-主要参数：
+Main parameters:
 
-- text: 待翻译文本
-- html: 是否为 HTML 文本(默认 false)
+- text: Text to translate
+- html: Whether the text is HTML (default false)
 
-返回值错误代码定义：
+Error code definitions for return values:
 
-- 0: 成功
-- 1200: 参数不合法
-- 1201: 翻译失败
-- 1209: 内部错误
+- 0: Success
+- 1200: Invalid parameters
+- 1201: Translation failed
+- 1209: Internal error

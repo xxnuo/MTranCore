@@ -1,42 +1,43 @@
-# MT - 命令行翻译工具
+# MT - Command Line Translation Tool
 
-一个简单的命令行翻译工具，基于 Bergamot 翻译引擎。
+A simple command line translation tool based on the Bergamot translation engine.
 
-## 构建
+## Build
 
 ```bash
 make build-mt
 ```
 
-编译后的二进制文件位于 `build/mt`。
+The compiled binary is located at `build/mt`.
 
-## 使用方法
+## Usage
 
-### 基本用法
+### Basic Usage
 
-使用模型目录（自动发现模型文件）：
+Use model directory (automatically discovers model files):
 
 ```bash
 ./build/mt -model ./models/enzh -text "Hello, world!"
 ```
 
-### REPL 交互模式
+### REPL Interactive Mode
 
-启动交互式翻译界面，可以持续输入文本并获得翻译结果：
+Launch interactive translation interface for continuous text input and translation:
 
 ```bash
 ./build/mt -model ./models/enzh -r
 ```
 
-在 REPL 模式下：
-- 输入文本后按回车即可获得翻译
-- 输入 `exit` 或 `quit` 退出
-- 按 `Ctrl+D` 也可退出
-- 支持 HTML 模式：`./build/mt -model ./models/enzh -r -html`
+In REPL mode:
 
-### 使用独立文件
+- Enter text and press Enter to get translation
+- Type `exit` or `quit` to exit
+- Press `Ctrl+D` to exit
+- Supports HTML mode: `./build/mt -model ./models/enzh -r -html`
 
-如果需要手动指定每个模型文件：
+### Using Separate Files
+
+To manually specify each model file:
 
 ```bash
 ./build/mt \
@@ -47,55 +48,57 @@ make build-mt
   -text "Hello, world!"
 ```
 
-### HTML 翻译
+### HTML Translation
 
-翻译 HTML 内容：
+Translate HTML content:
 
 ```bash
 ./build/mt -model ./models/enzh -html -text "<p>Hello, world!</p>"
 ```
 
-### 从标准输入读取（配合管道）
+### Read from Standard Input (with pipes)
 
 ```bash
 echo "Hello, world!" | xargs -I {} ./build/mt -model ./models/enzh -text "{}"
 ```
 
-## 命令行选项
+## Command Line Options
 
-| 选项 | 说明 | 默认值 |
-|------|------|--------|
-| `-model` | 模型目录路径（自动发现文件） | - |
-| `-model-file` | 模型文件路径 (.bin) | - |
-| `-shortlist` | 词汇表快捷列表文件路径 (lex*.bin) | - |
-| `-vocab-src` | 源语言词汇表文件路径 (.spm) | - |
-| `-vocab-trg` | 目标语言词汇表文件路径 (.spm) | - |
-| `-vocab` | 词汇表文件路径 (.spm) | - |
-| `-text` | 要翻译的文本（非 REPL 模式下必需） | - |
-| `-html` | 将输入视为 HTML | false |
-| `-cache` | 翻译缓存大小 | 1024 |
-| `-repl` | 启动 REPL（交互式）模式 | false |
+| Option        | Description                                   | Default |
+| ------------- | --------------------------------------------- | ------- |
+| `-model`      | Model directory path (auto-discovers files)   | -       |
+| `-model-file` | Model file path (.bin)                        | -       |
+| `-shortlist`  | Vocabulary shortlist file path (lex\*.bin)    | -       |
+| `-vocab-src`  | Source language vocabulary file path (.spm)   | -       |
+| `-vocab-trg`  | Target language vocabulary file path (.spm)   | -       |
+| `-vocab`      | Vocabulary file path (.spm)                   | -       |
+| `-text`       | Text to translate (required in non-REPL mode) | -       |
+| `-html`       | Treat input as HTML                           | false   |
+| `-cache`      | Translation cache size                        | 1024    |
+| `-repl`       | Start REPL (interactive) mode                 | false   |
 
-## 示例
+## Examples
 
-### 英译中
+### English to Chinese
 
 ```bash
 ./build/mt -model ./models/enzh -text "Good morning!"
 ```
 
-输出：
+Output:
+
 ```
 早上好！
 ```
 
-### REPL 交互模式示例
+### REPL Interactive Mode Example
 
 ```bash
 ./build/mt -model ./models/enzh -r
 ```
 
-交互示例：
+Interactive example:
+
 ```
 Bergamot Translator REPL Mode
 Enter text to translate (type 'exit', 'quit', or press Ctrl+D to exit)
@@ -113,9 +116,9 @@ Enter text to translate (type 'exit', 'quit', or press Ctrl+D to exit)
 Goodbye!
 ```
 
-### 批量翻译（脚本示例）
+### Batch Translation (Script Example)
 
-创建一个文件 `translate.sh`：
+Create a file `translate.sh`:
 
 ```bash
 #!/bin/bash
@@ -126,25 +129,27 @@ while IFS= read -r line; do
 done < input.txt > output.txt
 ```
 
-## 注意事项
+## Notes
 
-1. **模型文件**：确保模型目录包含必要的文件：
-   - 模型文件：`*.bin`（不以 lex 开头）
-   - 词汇表快捷列表：`lex*.bin`
-   - 词汇表文件：至少一个 `*.spm` 文件
+1. **Model Files**: Ensure the model directory contains the necessary files:
 
-2. **性能**：
-   - **单次翻译模式**：每次启动都需要加载模型，适合快速测试和脚本调用
-   - **REPL 模式**：模型只加载一次，适合需要多次翻译的交互场景，性能更优
-   - **Worker 服务**：如果需要高性能批量翻译或生产环境使用，建议使用 worker 服务模式
+   - Model file: `*.bin` (not starting with lex)
+   - Vocabulary shortlist: `lex*.bin`
+   - Vocabulary files: at least one `*.spm` file
 
-3. **内存使用**：翻译引擎会占用一定内存，根据模型大小而定。
+2. **Performance**:
 
-## 与 Worker 服务的区别
+   - **Single Translation Mode**: Model loads on each startup, suitable for quick testing and script calls
+   - **REPL Mode**: Model loads only once, suitable for interactive scenarios requiring multiple translations, better performance
+   - **Worker Service**: For high-performance batch translation or production environment use, the worker service mode is recommended
 
-| 特性 | MT 工具（单次） | MT 工具（REPL） | Worker 服务 |
-|------|----------------|-----------------|------------|
-| 用途 | 单次命令行翻译 | 交互式翻译 | 长期运行服务 |
-| 接口 | 命令行参数 | 命令行交互 | HTTP/gRPC/WebSocket |
-| 性能 | 每次启动加载模型 | 模型加载一次 | 模型常驻内存 |
-| 适用场景 | 脚本、快速测试 | 本地交互、多次翻译 | 生产环境、高并发 |
+3. **Memory Usage**: The translation engine will consume memory depending on the model size.
+
+## Differences from Worker Service
+
+| Feature     | MT Tool (Single)         | MT Tool (REPL)                           | Worker Service                           |
+| ----------- | ------------------------ | ---------------------------------------- | ---------------------------------------- |
+| Purpose     | One-time CLI translation | Interactive translation                  | Long-running service                     |
+| Interface   | CLI arguments            | CLI interaction                          | HTTP/gRPC/WebSocket                      |
+| Performance | Model loads each startup | Model loads once                         | Model resides in memory                  |
+| Use Cases   | Scripts, quick testing   | Local interaction, multiple translations | Production environment, high concurrency |
