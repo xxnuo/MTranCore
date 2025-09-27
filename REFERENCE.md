@@ -44,7 +44,7 @@ The service uses standardized error codes across all protocols:
 
 ### Connection
 
-Connect to the gRPC server using the configured address (default: `0.0.0.0:8991`).
+Connect to the gRPC server using the configured address (default: `0.0.0.0:8988`).
 
 ```
 grpc://<host>:<port>
@@ -221,7 +221,7 @@ message ComputeResponse {
 
 ### Connection
 
-Connect to the HTTP server using the configured address (default: `http://0.0.0.0:8989`).
+Connect to the HTTP server using the configured address (default: `http://0.0.0.0:8988`).
 
 All endpoints use JSON for request and response bodies.
 
@@ -420,7 +420,7 @@ Translate text.
 
 ### Connection
 
-Connect to the WebSocket server at the configured address (default: `ws://0.0.0.0:8990/ws`).
+Connect to the WebSocket server at the configured address (default: `ws://0.0.0.0:8988/ws`).
 
 ### Message Format
 
@@ -590,42 +590,30 @@ The worker service can be configured using environment variables:
 
 ### General Settings
 
-| Variable    | Default | Description                                |
-| ----------- | ------- | ------------------------------------------ |
-| `LOG_LEVEL` | `info`  | Logging level (debug, info, warn, error)   |
-| `WORK_DIR`  | `./`    | Working directory for relative model paths |
+| Variable      | Default   | Description                                               |
+| ------------- | --------- | --------------------------------------------------------- |
+| `LOG_LEVEL`   | `info`    | Logging level (debug, info, warn, error)                  |
+| `WORK_DIR`    | `./`      | Working directory for relative model paths                |
+| `SERVER_HOST` | `0.0.0.0` | Server host address (shared by all enabled services)      |
+| `SERVER_PORT` | `8988`    | Server port (shared by all enabled services)              |
 
-### HTTP Server
+### Service Control
 
-| Variable      | Default   | Description        |
-| ------------- | --------- | ------------------ |
-| `ENABLE_HTTP` | `true`    | Enable HTTP server |
-| `HTTP_HOST`   | `0.0.0.0` | HTTP server host   |
-| `HTTP_PORT`   | `8989`    | HTTP server port   |
+All services (HTTP, WebSocket, gRPC) run on the same port using connection multiplexing.
 
-### WebSocket Server
-
-| Variable           | Default   | Description             |
-| ------------------ | --------- | ----------------------- |
-| `ENABLE_WEBSOCKET` | `true`    | Enable WebSocket server |
-| `WEBSOCKET_HOST`   | `0.0.0.0` | WebSocket server host   |
-| `WEBSOCKET_PORT`   | `8990`    | WebSocket server port   |
-
-### gRPC Server
-
-| Variable      | Default   | Description        |
-| ------------- | --------- | ------------------ |
-| `ENABLE_GRPC` | `true`    | Enable gRPC server |
-| `GRPC_HOST`   | `0.0.0.0` | gRPC server host   |
-| `GRPC_PORT`   | `8991`    | gRPC server port   |
+| Variable           | Default | Description                   |
+| ------------------ | ------- | ----------------------------- |
+| `ENABLE_HTTP`      | `true`  | Enable HTTP REST API          |
+| `ENABLE_WEBSOCKET` | `true`  | Enable WebSocket API          |
+| `ENABLE_GRPC`      | `true`  | Enable gRPC API               |
 
 ### Example Configuration
 
-Disable WebSocket and change HTTP port:
+Disable WebSocket and change server port:
 
 ```bash
 export ENABLE_WEBSOCKET=false
-export HTTP_PORT=9000
+export SERVER_PORT=9000
 ./worker
 ```
 

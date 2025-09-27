@@ -7,13 +7,13 @@ This document provides quick usage examples for the three protocols of MTranCore
 ### 1. Health Check
 
 ```bash
-curl http://localhost:8989/health
+curl http://localhost:8988/health
 ```
 
 ### 2. Load Translation Engine
 
 ```bash
-curl -X POST http://localhost:8989/poweron \
+curl -X POST http://localhost:8988/poweron \
   -H "Content-Type: application/json" \
   -d '{"path": "models/en-zh"}'
 ```
@@ -21,13 +21,13 @@ curl -X POST http://localhost:8989/poweron \
 ### 3. Check Ready Status
 
 ```bash
-curl http://localhost:8989/ready
+curl http://localhost:8988/ready
 ```
 
 ### 4. Translate Text
 
 ```bash
-curl -X POST http://localhost:8989/compute \
+curl -X POST http://localhost:8988/compute \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, world!", "html": false}'
 ```
@@ -36,12 +36,12 @@ curl -X POST http://localhost:8989/compute \
 
 ```bash
 # Graceful Shutdown (wait for requests to complete)
-curl -X POST http://localhost:8989/poweroff \
+curl -X POST http://localhost:8988/poweroff \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": false}'
 
 # Force Shutdown
-curl -X POST http://localhost:8989/poweroff \
+curl -X POST http://localhost:8988/poweroff \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": true}'
 ```
@@ -53,33 +53,33 @@ Use `grpcurl` tool to test gRPC API:
 ### 1. Health Check
 
 ```bash
-grpcurl -plaintext localhost:8991 translator.TranslatorService/Health
+grpcurl -plaintext localhost:8988 translator.TranslatorService/Health
 ```
 
 ### 2. Load Translation Engine
 
 ```bash
 grpcurl -plaintext -d '{"path": "models/en-zh"}' \
-  localhost:8991 translator.TranslatorService/Poweron
+  localhost:8988 translator.TranslatorService/Poweron
 ```
 
 ### 3. Check Ready Status
 
 ```bash
-grpcurl -plaintext localhost:8991 translator.TranslatorService/Ready
+grpcurl -plaintext localhost:8988 translator.TranslatorService/Ready
 ```
 
 ### 4. Translate Text
 
 ```bash
 grpcurl -plaintext -d '{"text": "Hello, world!", "html": false}' \
-  localhost:8991 translator.TranslatorService/Compute
+  localhost:8988 translator.TranslatorService/Compute
 ```
 
 ### 5. Streaming Translation
 
 ```bash
-grpcurl -plaintext -d @ localhost:8991 translator.TranslatorService/ComputeStream <<EOF
+grpcurl -plaintext -d @ localhost:8988 translator.TranslatorService/ComputeStream <<EOF
 {"text": "Hello"}
 {"text": "World"}
 {"text": "Goodbye"}
@@ -90,7 +90,7 @@ EOF
 
 ```bash
 grpcurl -plaintext -d '{"time": 0, "force": false}' \
-  localhost:8991 translator.TranslatorService/Poweroff
+  localhost:8988 translator.TranslatorService/Poweroff
 ```
 
 ## WebSocket API Examples
@@ -98,7 +98,7 @@ grpcurl -plaintext -d '{"time": 0, "force": false}' \
 ### Use JavaScript (Browser/Node.js)
 
 ```javascript
-const ws = new WebSocket('ws://localhost:8990/ws');
+const ws = new WebSocket('ws://localhost:8988/ws');
 
 ws.onopen = () => {
   console.log('Connected');
@@ -161,7 +161,7 @@ import json
 import websockets
 
 async def translate():
-    uri = "ws://localhost:8990/ws"
+    uri = "ws://localhost:8988/ws"
     async with websockets.connect(uri) as websocket:
         # 1. Load Engine
         await websocket.send(json.dumps({
@@ -204,7 +204,7 @@ asyncio.run(translate())
 
 ```bash
 # Install wscat: npm install -g wscat
-wscat -c ws://localhost:8990/ws
+wscat -c ws://localhost:8988/ws
 
 # Send messages after connection:
 
@@ -267,16 +267,16 @@ Detailed error code list please refer to [REFERENCE.md](REFERENCE.md#error-codes
 #!/bin/bash
 
 # 1. Check Server Health Status
-curl http://localhost:8989/health
+curl http://localhost:8988/health
 
 # 2. Load Translation Model
-curl -X POST http://localhost:8989/poweron \
+curl -X POST http://localhost:8988/poweron \
   -H "Content-Type: application/json" \
   -d '{"path": "models/en-zh"}'
 
 # 3. Wait for Model Loading
 while true; do
-  ready=$(curl -s http://localhost:8989/ready | jq -r '.data.ready')
+  ready=$(curl -s http://localhost:8988/ready | jq -r '.data.ready')
   if [ "$ready" = "true" ]; then
     echo "Engine is ready"
     break
@@ -286,7 +286,7 @@ while true; do
 done
 
 # 4. Execute Translation
-result=$(curl -s -X POST http://localhost:8989/compute \
+result=$(curl -s -X POST http://localhost:8988/compute \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, world!", "html": false}')
 
@@ -297,7 +297,7 @@ translated=$(echo $result | jq -r '.data.translated_text')
 echo "Translated text: $translated"
 
 # 6. Graceful Shutdown Server
-curl -X POST http://localhost:8989/poweroff \
+curl -X POST http://localhost:8988/poweroff \
   -H "Content-Type: application/json" \
   -d '{"time": 5, "force": false}'
 ```

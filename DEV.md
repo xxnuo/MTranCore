@@ -1,20 +1,16 @@
 # Worker 服务定义
 
-服务器支持 gRPC 、HTTP 、WebSocket 三种协议。
+服务器支持 gRPC 、HTTP 、WebSocket 三种协议，所有服务统一运行在同一个端口上。
 
 # 环境变量
 
 - `LOG_LEVEL`: 日志级别，默认 `info`，可选 `debug`、`info`、`warn`、`error`(不区分大小写)。
 - `WROK_DIR`: 工作目录，默认 `./`，主要用于拼接在 poweron 传入的模型目录 path 路径前。
+- `SERVER_HOST`: 服务器主机地址，默认 `0.0.0.0`。
+- `SERVER_PORT`: 服务器统一端口，默认 `8988`，所有启用的服务(HTTP、WebSocket、gRPC)都将运行在此端口上。
 - `ENABLE_HTTP`: 是否启用 HTTP 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
 - `ENABLE_WEBSOCKET`: 是否启用 WebSocket 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
 - `ENABLE_GRPC`: 是否启用 gRPC 服务，默认 `true`，可选值：`true`、`false`、0、1、'yes'、'no'(不区分大小写)。
-- `HTTP_HOST`: HTTP 服务主机，默认 `0.0.0.0`，仅在 `ENABLE_HTTP` 为真时生效。
-- `HTTP_PORT`: HTTP 服务端口，默认 `8989`，仅在 `ENABLE_HTTP` 为 `true` 时生效。
-- `WEBSOCKET_HOST`: WebSocket 服务主机，默认 `0.0.0.0`，仅在 `ENABLE_WEBSOCKET` 为真时生效。
-- `WEBSOCKET_PORT`: WebSocket 服务端口，默认 `8990`，仅在 `ENABLE_WEBSOCKET` 为真时生效。
-- `GRPC_HOST`: gRPC 服务主机，默认 `0.0.0.0`，仅在 `ENABLE_GRPC` 为真时生效。
-- `GRPC_PORT`: gRPC 服务端口，默认 `8991`，仅在 `ENABLE_GRPC` 为真时生效。
 
 ## 主要接口定义
 

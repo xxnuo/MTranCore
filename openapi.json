@@ -15,16 +15,8 @@
   },
   "servers": [
     {
-      "url": "http://localhost:8989",
-      "description": "HTTP/REST API Server"
-    },
-    {
-      "url": "http://localhost:8991",
-      "description": "gRPC Server"
-    },
-    {
-      "url": "ws://localhost:8990",
-      "description": "WebSocket Server"
+      "url": "http://localhost:8988",
+      "description": "Unified Server - HTTP/REST, gRPC, and WebSocket (all on port 8988)"
     }
   ],
   "tags": [

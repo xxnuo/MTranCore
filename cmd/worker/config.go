@@ -11,17 +11,13 @@ type Config struct {
 	LogLevel string
 	WorkDir  string
 
+	// Unified server configuration
+	ServerHost string
+	ServerPort string
+
 	EnableHTTP      bool
-	HTTPHost        string
-	HTTPPort        string
-
 	EnableWebSocket bool
-	WebSocketHost   string
-	WebSocketPort   string
-
-	EnableGRPC bool
-	GRPCHost   string
-	GRPCPort   string
+	EnableGRPC      bool
 }
 
 // LoadConfig loads configuration from environment variables
@@ -30,17 +26,13 @@ func LoadConfig() *Config {
 		LogLevel: getEnvOrDefault("LOG_LEVEL", "info"),
 		WorkDir:  getEnvOrDefault("WORK_DIR", "./"),
 
-		EnableHTTP: parseBool(getEnvOrDefault("ENABLE_HTTP", "true")),
-		HTTPHost:   getEnvOrDefault("HTTP_HOST", "0.0.0.0"),
-		HTTPPort:   getEnvOrDefault("HTTP_PORT", "8989"),
+		// Unified server configuration
+		ServerHost: getEnvOrDefault("SERVER_HOST", "0.0.0.0"),
+		ServerPort: getEnvOrDefault("SERVER_PORT", "8988"),
 
+		EnableHTTP:      parseBool(getEnvOrDefault("ENABLE_HTTP", "true")),
 		EnableWebSocket: parseBool(getEnvOrDefault("ENABLE_WEBSOCKET", "true")),
-		WebSocketHost:   getEnvOrDefault("WEBSOCKET_HOST", "0.0.0.0"),
-		WebSocketPort:   getEnvOrDefault("WEBSOCKET_PORT", "8990"),
-
-		EnableGRPC: parseBool(getEnvOrDefault("ENABLE_GRPC", "true")),
-		GRPCHost:   getEnvOrDefault("GRPC_HOST", "0.0.0.0"),
-		GRPCPort:   getEnvOrDefault("GRPC_PORT", "8991"),
+		EnableGRPC:      parseBool(getEnvOrDefault("ENABLE_GRPC", "true")),
 	}
 }
 

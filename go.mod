@@ -7,6 +7,7 @@ require (
 	github.com/gofiber/fiber/v3 v3.0.0-rc.2
 	github.com/jerbob92/wazero-emscripten-embind v1.5.2
 	github.com/kiuber/gofiber3-contrib/websocket v0.1.1-0.20250623070125-7ef7e8d8a964
+	github.com/soheilhy/cmux v0.1.5
 	github.com/tetratelabs/wazero v1.9.0
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.9

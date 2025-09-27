@@ -6,9 +6,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 
+	"github.com/gofiber/fiber/v3"
+	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -23,79 +26,68 @@ func main() {
 	InitLogger(cfg.LogLevel)
 
 	Info("==============================================")
-	Info("Starting MTranCore Worker Service")
+	Info("Starting MTranCore Worker Service (Unified)")
 	Info("Log Level: %s", cfg.LogLevel)
 	Info("Work Directory: %s", cfg.WorkDir)
+	Info("Server Address: %s:%s", cfg.ServerHost, cfg.ServerPort)
 	Info("==============================================")
+
+	// Create a TCP listener on the unified port
+	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
+	lis, err := net.Listen("tcp", addr)
+	if err != nil {
+		Fatal("Failed to listen on %s: %v", addr, err)
+	}
+
+	// Create a cmux multiplexer
+	m := cmux.New(lis)
 
 	var wg sync.WaitGroup
 	shutdownCh := make(chan struct{})
 
-	// Start HTTP server if enabled
-	var httpServer *Server
-	if cfg.EnableHTTP {
-		httpServer = NewServer(cfg)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			addr := fmt.Sprintf("%s:%s", cfg.HTTPHost, cfg.HTTPPort)
-			Info("[HTTP] Starting server on %s", addr)
-			Debug("[HTTP] Available endpoints:")
-			Debug("  GET  /health   - Health check")
-			Debug("  POST /poweron  - Load translation engine")
-			Debug("  POST /poweroff - Shutdown server")
-			Debug("  GET  /ready    - Check engine status")
-			Debug("  POST /compute  - Translate text")
+	// Match gRPC connections
+	grpcListener := m.MatchWithWriters(
+		cmux.HTTP2MatchHeaderFieldSendSettings("content-type", "application/grpc"),
+	)
 
-			if err := httpServer.Listen(addr); err != nil {
-				Error("[HTTP] Server error: %v", err)
-			}
-		}()
-	} else {
-		Info("[HTTP] Disabled")
-	}
+	// Match HTTP connections (including WebSocket upgrades)
+	httpListener := m.Match(cmux.Any())
 
-	// Start WebSocket server if enabled
-	var wsServer *WebSocketServer
-	if cfg.EnableWebSocket {
-		wsServer = NewWebSocketServer(cfg)
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			addr := fmt.Sprintf("%s:%s", cfg.WebSocketHost, cfg.WebSocketPort)
-			Info("[WebSocket] Starting server on %s", addr)
-			Debug("[WebSocket] Available message types:")
-			Debug("  - poweron  - Load translation engine")
-			Debug("  - poweroff - Shutdown server")
-			Debug("  - ready    - Check engine status")
-			Debug("  - compute  - Translate text")
+	// Create unified server for HTTP and WebSocket
+	var unifiedServer *UnifiedServer
+	var grpcServerInstance *grpc.Server
+	var grpcService *GRPCServer
 
-			if err := wsServer.Listen(addr); err != nil {
-				Error("[WebSocket] Server error: %v", err)
-			}
-		}()
-	} else {
-		Info("[WebSocket] Disabled")
+	enabledServices := []string{}
+
+	if cfg.EnableHTTP || cfg.EnableWebSocket {
+		unifiedServer = NewUnifiedServer(cfg)
+		
+		if cfg.EnableHTTP {
+			enabledServices = append(enabledServices, "HTTP")
+		}
+		if cfg.EnableWebSocket {
+			enabledServices = append(enabledServices, "WebSocket")
+		}
 	}
 
 	// Start gRPC server if enabled
-	var grpcServerInstance *grpc.Server
-	var grpcService *GRPCServer
 	if cfg.EnableGRPC {
 		grpcService = NewGRPCServer(cfg)
 		grpcServerInstance = grpc.NewServer()
 		pb.RegisterTranslatorServiceServer(grpcServerInstance, grpcService)
 		reflection.Register(grpcServerInstance)
+		
+		// Link gRPC service with unified server for shared state
+		if unifiedServer != nil {
+			unifiedServer.SetGRPCService(grpcService)
+		}
+
+		enabledServices = append(enabledServices, "gRPC")
 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			addr := fmt.Sprintf("%s:%s", cfg.GRPCHost, cfg.GRPCPort)
-			lis, err := net.Listen("tcp", addr)
-			if err != nil {
-				Fatal("[gRPC] Failed to listen: %v", err)
-			}
-
 			Info("[gRPC] Starting server on %s", addr)
 			Debug("[gRPC] Service: TranslatorService")
 			Debug("  - Health")
@@ -105,16 +97,59 @@ func main() {
 			Debug("  - Compute")
 			Debug("  - ComputeStream")
 
-			if err := grpcServerInstance.Serve(lis); err != nil {
+			if err := grpcServerInstance.Serve(grpcListener); err != nil {
 				Error("[gRPC] Server error: %v", err)
 			}
 		}()
-	} else {
-		Info("[gRPC] Disabled")
 	}
 
+	// Start HTTP/WebSocket server
+	if unifiedServer != nil {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if cfg.EnableHTTP {
+				Info("[HTTP] Starting server on %s", addr)
+				Debug("[HTTP] Available endpoints:")
+				Debug("  GET  /health   - Health check")
+				Debug("  POST /poweron  - Load translation engine")
+				Debug("  POST /poweroff - Shutdown server")
+				Debug("  GET  /ready    - Check engine status")
+				Debug("  POST /compute  - Translate text")
+			}
+			if cfg.EnableWebSocket {
+				Info("[WebSocket] Starting server on %s", addr)
+				Debug("[WebSocket] Available at /ws")
+				Debug("[WebSocket] Message types:")
+				Debug("  - poweron  - Load translation engine")
+				Debug("  - poweroff - Shutdown server")
+				Debug("  - ready    - Check engine status")
+				Debug("  - compute  - Translate text")
+			}
+
+			// Use the HTTP listener from cmux
+			if err := unifiedServer.app.Listener(httpListener, fiber.ListenConfig{}); err != nil {
+				Error("[HTTP/WebSocket] Server error: %v", err)
+			}
+		}()
+	}
+
+	// Start cmux
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := m.Serve(); err != nil {
+			Error("[Multiplexer] Error: %v", err)
+		}
+	}()
+
 	Info("==============================================")
-	Info("All enabled services are running")
+	if len(enabledServices) > 0 {
+		Info("Enabled services: %s", strings.Join(enabledServices, ", "))
+		Info("All services running on port %s", cfg.ServerPort)
+	} else {
+		Warn("No services enabled!")
+	}
 	Info("Press Ctrl+C to shutdown gracefully")
 	Info("==============================================")
 
@@ -133,16 +168,10 @@ func main() {
 	shutdownCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if httpServer != nil {
-		Info("[HTTP] Shutting down...")
-		httpServer.app.ShutdownWithContext(shutdownCtx)
-		httpServer.Close()
-	}
-
-	if wsServer != nil {
-		Info("[WebSocket] Shutting down...")
-		wsServer.app.ShutdownWithContext(shutdownCtx)
-		wsServer.Close()
+	if unifiedServer != nil {
+		Info("[HTTP/WebSocket] Shutting down...")
+		unifiedServer.app.ShutdownWithContext(shutdownCtx)
+		unifiedServer.Close()
 	}
 
 	if grpcServerInstance != nil {
@@ -152,6 +181,9 @@ func main() {
 			grpcService.Close()
 		}
 	}
+
+	// Close the multiplexer listener
+	lis.Close()
 
 	wg.Wait()
 	Info("All services stopped. Goodbye!")
