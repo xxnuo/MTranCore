@@ -270,40 +270,16 @@
         },
         "responses": {
           "200": {
-            "description": "Translation result",
+            "description": "Translation result (plain text)",
             "content": {
-              "application/json": {
+              "text/plain": {
                 "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/StandardResponse"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "data": {
-                          "$ref": "#/components/schemas/ComputeResponse"
-                        }
-                      }
-                    }
-                  ]
+                  "type": "string"
                 },
                 "examples": {
                   "success": {
                     "summary": "Successful translation",
-                    "value": {
-                      "code": 0,
-                      "data": {
-                        "translated_text": "你好，世界！"
-                      }
-                    }
-                  },
-                  "engine_not_ready": {
-                    "summary": "Engine not ready",
-                    "value": {
-                      "code": 1200,
-                      "message": "Engine is not ready. Please call poweron first"
-                    }
+                    "value": "你好，世界！"
                   }
                 }
               }

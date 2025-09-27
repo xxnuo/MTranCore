@@ -376,14 +376,9 @@ Translate text.
 
 **Success Response**: HTTP 200
 
-```json
-{
-  "code": 0,
-  "data": {
-    "translated_text": "Translated text"
-  }
-}
-```
+Content-Type: `text/plain; charset=utf-8`
+
+Returns the translated text directly as plain text (not JSON).
 
 **Error Responses**:
 

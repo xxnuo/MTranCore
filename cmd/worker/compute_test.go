@@ -132,7 +132,7 @@ func TestServer_Compute_Success(t *testing.T) {
 		req := httptest.NewRequest("POST", "/compute", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := server.GetApp().Test(req)
+		resp, err := server.GetApp().Test(req, fiber.TestConfig{Timeout: 10 * time.Second})
 		if err != nil {
 			t.Fatalf("app.Test() error = %v", err)
 		}
@@ -143,23 +143,16 @@ func TestServer_Compute_Success(t *testing.T) {
 			t.Fatalf("Status code = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
 		}
 
-		var result StandardResponse
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		if err := json.Unmarshal(bodyBytes, &result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
+		// Response should be plain text now
+		translatedText, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("Failed to read response: %v", err)
 		}
 
-		if result.Code != CodeSuccess {
-			t.Errorf("Code = %d, want %d", result.Code, CodeSuccess)
-		}
-
-		computeData, _ := result.Data.(map[string]interface{})
-		translatedText := computeData["translated_text"].(string)
-
-		if translatedText == "" {
+		if string(translatedText) == "" {
 			t.Error("translated_text is empty")
 		}
-		t.Logf("Translation: 'Hello, world!' -> '%s'", translatedText)
+		t.Logf("Translation: 'Hello, world!' -> '%s'", string(translatedText))
 	})
 
 	t.Run("translate HTML", func(t *testing.T) {
@@ -171,7 +164,7 @@ func TestServer_Compute_Success(t *testing.T) {
 		req := httptest.NewRequest("POST", "/compute", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := server.GetApp().Test(req)
+		resp, err := server.GetApp().Test(req, fiber.TestConfig{Timeout: 10 * time.Second})
 		if err != nil {
 			t.Fatalf("app.Test() error = %v", err)
 		}
@@ -182,19 +175,16 @@ func TestServer_Compute_Success(t *testing.T) {
 			t.Fatalf("Status code = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
 		}
 
-		var result StandardResponse
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		if err := json.Unmarshal(bodyBytes, &result); err != nil {
-			t.Fatalf("Failed to decode response: %v", err)
+		// Response should be plain text now
+		translatedText, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("Failed to read response: %v", err)
 		}
 
-		computeData, _ := result.Data.(map[string]interface{})
-		translatedText := computeData["translated_text"].(string)
-
-		if translatedText == "" {
+		if string(translatedText) == "" {
 			t.Error("translated_text is empty")
 		}
-		t.Logf("HTML Translation: '<p>Hello, world!</p>' -> '%s'", translatedText)
+		t.Logf("HTML Translation: '<p>Hello, world!</p>' -> '%s'", string(translatedText))
 	})
 }
 
@@ -258,14 +248,14 @@ func TestServer_ConcurrentTranslations(t *testing.T) {
 				return
 			}
 
-			var result StandardResponse
-			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			// Response should be plain text now
+			translatedText, err := io.ReadAll(resp.Body)
+			if err != nil {
 				errors[idx] = err
 				return
 			}
 
-			computeData, _ := result.Data.(map[string]interface{})
-			results[idx] = computeData["translated_text"].(string)
+			results[idx] = string(translatedText)
 		}(i, text)
 	}
 

@@ -280,7 +280,9 @@ func (s *Server) compute(c fiber.Ctx) error {
 			NewErrorResponse(CodeComputeFailure, "Translation failed: "+err.Error()))
 	}
 
-	return c.JSON(NewSuccessResponse(ComputeResponse{TranslatedText: translatedText}))
+	// Return plain text on success
+	c.Set("Content-Type", "text/plain; charset=utf-8")
+	return c.SendString(translatedText)
 }
 
 // ShutdownChannel returns the shutdown channel

@@ -100,13 +100,12 @@ func (c *HTTPClient) Compute(ctx context.Context, text string, html bool) (strin
 		return "", fmt.Errorf("server returned status %d", resp.StatusCode)
 	}
 
-	var response struct {
-		TranslatedText string `json:"translated_text"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+	// Server now returns plain text on success
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(resp.Body); err != nil {
 		return "", err
 	}
-	return response.TranslatedText, nil
+	return buf.String(), nil
 }
 
 func (c *HTTPClient) Close() error {
