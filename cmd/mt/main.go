@@ -5,13 +5,10 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	engine "github.com/xxnuo/MTranCore/engine"
-	"github.com/xxnuo/MTranCore/internal/wasm"
 )
 
 var (
@@ -94,155 +91,36 @@ func main() {
 }
 
 func createTranslator(ctx context.Context) (*engine.Translator, func(), error) {
-	var actualModelPath, actualShortlist string
-	var vocabPaths []string
-	var err error
+	// Build engine config
+	engineCfg := engine.EngineConfig{
+		CacheSize: *cacheSize,
+	}
 
-	// Auto-discover files if modelDir is provided
 	if *modelDir != "" {
-		actualModelPath, actualShortlist, vocabPaths, err = discoverModelFiles(*modelDir)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to discover model files: %w", err)
-		}
+		engineCfg.ModelDir = *modelDir
 	} else {
-		actualModelPath = *modelPath
-		actualShortlist = *shortlist
-		vocabPaths = []string{*vocabSrc, *vocabTrg, *vocab}
+		engineCfg.ModelPath = *modelPath
+		engineCfg.LexicalShortlistPath = *shortlist
+		engineCfg.VocabularyPaths = []string{*vocabSrc, *vocabTrg, *vocab}
 	}
 
-	// Open model file
-	modelFile, err := os.Open(actualModelPath)
+	// Create translator using engine package
+	translator, loadedFiles, err := engine.CreateTranslator(ctx, engineCfg)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open model file: %w", err)
-	}
-
-	// Open shortlist file
-	shortlistFile, err := os.Open(actualShortlist)
-	if err != nil {
-		modelFile.Close()
-		return nil, nil, fmt.Errorf("failed to open shortlist file: %w", err)
-	}
-
-	// Open vocabulary files
-	var vocabFiles []*os.File
-	vocabularies := make([]io.Reader, len(vocabPaths))
-	for i, vocabPath := range vocabPaths {
-		vocabFile, err := os.Open(vocabPath)
-		if err != nil {
-			// Cleanup previously opened files
-			modelFile.Close()
-			shortlistFile.Close()
-			for _, f := range vocabFiles {
-				f.Close()
-			}
-			return nil, nil, fmt.Errorf("failed to open vocabulary file %s: %w", vocabPath, err)
-		}
-		vocabFiles = append(vocabFiles, vocabFile)
-		vocabularies[i] = vocabFile
+		return nil, nil, err
 	}
 
 	// Cleanup function
 	cleanup := func() {
-		modelFile.Close()
-		shortlistFile.Close()
-		for _, f := range vocabFiles {
-			f.Close()
-		}
-	}
-
-	// Create engine config
-	cfg := engine.Config{
-		CompileConfig: wasm.CompileConfig{
-			Stderr: nil,
-			Stdout: nil,
-		},
-		FilesBundle: engine.FilesBundle{
-			Model:            modelFile,
-			LexicalShortlist: shortlistFile,
-			Vocabularies:     vocabularies,
-		},
-		CacheSize:       *cacheSize,
-		BergamotOptions: engine.DefaultBergamotOptions(),
-	}
-
-	// Create translator
-	translator, err := engine.New(ctx, cfg)
-	if err != nil {
-		cleanup()
-		return nil, nil, fmt.Errorf("failed to create translator: %w", err)
-	}
-
-	// Wrap cleanup to also close translator
-	fullCleanup := func() {
 		if translator != nil {
 			translator.Close(context.Background())
 		}
-		cleanup()
-	}
-
-	return translator, fullCleanup, nil
-}
-
-// discoverModelFiles automatically finds model files in a directory
-func discoverModelFiles(dir string) (modelPath, shortlistPath string, vocabPaths []string, err error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return "", "", nil, err
-	}
-
-	var srcVocab, trgVocab, sharedVocab string
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		fullPath := filepath.Join(dir, name)
-
-		// Detect model file (.bin but not lex*.bin)
-		if filepath.Ext(name) == ".bin" && !hasPrefix(name, "lex") {
-			modelPath = fullPath
-		}
-		// Detect shortlist file (lex*.bin)
-		if filepath.Ext(name) == ".bin" && hasPrefix(name, "lex") {
-			shortlistPath = fullPath
-		}
-		// Detect vocabulary files (.spm)
-		if filepath.Ext(name) == ".spm" {
-			nameLower := strings.ToLower(name)
-			if strings.Contains(nameLower, "srcvocab") || strings.Contains(nameLower, "source") {
-				srcVocab = fullPath
-			} else if strings.Contains(nameLower, "trgvocab") || strings.Contains(nameLower, "target") {
-				trgVocab = fullPath
-			} else if strings.Contains(nameLower, "vocab") {
-				sharedVocab = fullPath
-			}
+		if loadedFiles != nil {
+			loadedFiles.Close()
 		}
 	}
 
-	if modelPath == "" {
-		return "", "", nil, fmt.Errorf("model file (*.bin) not found in directory: %s", dir)
-	}
-	if shortlistPath == "" {
-		return "", "", nil, fmt.Errorf("shortlist file (lex*.bin) not found in directory: %s", dir)
-	}
-
-	// Determine which vocabularies to use:
-	// 1. If shared vocab exists, prefer it (for tied-embeddings models)
-	// 2. Otherwise, use separate srcvocab and trgvocab if both exist
-	if sharedVocab != "" {
-		vocabPaths = []string{sharedVocab}
-	} else if srcVocab != "" && trgVocab != "" {
-		vocabPaths = []string{srcVocab, trgVocab}
-	} else {
-		return "", "", nil, fmt.Errorf("vocabulary files not found in directory: %s (need either shared vocab or srcvocab+trgvocab)", dir)
-	}
-
-	return modelPath, shortlistPath, vocabPaths, nil
-}
-
-func hasPrefix(s, prefix string) bool {
-	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+	return translator, cleanup, nil
 }
 
 // runREPL runs the interactive REPL (Read-Eval-Print Loop) mode
