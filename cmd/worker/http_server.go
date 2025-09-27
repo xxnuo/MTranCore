@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -19,10 +17,7 @@ import (
 // Server represents the HTTP server
 type Server struct {
 	app            *fiber.App
-	translator     *engine.Translator
-	loadedFiles    *engine.LoadedFiles
-	queue          *TranslationQueue // Request queue for sequential processing
-	mu             sync.RWMutex
+	engineManager  *EngineManager
 	shutdownCh     chan struct{}
 	config         *Config
 	activeReqs     int32 // atomic counter for active requests
@@ -89,10 +84,10 @@ func NewServer(cfg *Config) *Server {
 	})
 
 	server := &Server{
-		app:        app,
-		config:     cfg,
-		shutdownCh: make(chan struct{}),
-		queue:      NewTranslationQueue(), // Initialize translation queue
+		app:           app,
+		config:        cfg,
+		shutdownCh:    make(chan struct{}),
+		engineManager: NewEngineManager(cfg),
 	}
 
 	// Suppress Fiber's server logger output
@@ -122,62 +117,29 @@ func (s *Server) poweron(c fiber.Ctx) error {
 			NewErrorResponse(CodePoweronInvalidParams, "Invalid JSON: "+err.Error()))
 	}
 
-	if req.Path == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodePoweronInvalidParams, "path is required"))
-	}
-
-	// Resolve path: if absolute, use as-is; otherwise join with work directory
-	var fullPath string
-	if filepath.IsAbs(req.Path) {
-		fullPath = req.Path
-	} else {
-		fullPath = filepath.Join(s.config.WorkDir, req.Path)
-	}
-
-	// Check if path exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return c.Status(fiber.StatusNotFound).JSON(
-			NewErrorResponse(CodePoweronPathNotExists, "path does not exist: "+fullPath))
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Unload existing engine if any
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close existing translator: %v", err)
-		}
-		s.translator = nil
-	}
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	// Create translator using model directory
 	ctx := context.Background()
-	config := engine.EngineConfig{ModelDir: fullPath}
-	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
-	if err != nil {
-		// Determine error code based on error message
-		errMsg := err.Error()
-		if containsAny(errMsg, "not found", "missing") {
-			return c.Status(fiber.StatusBadRequest).JSON(
-				NewErrorResponse(CodePoweronIncompleteFiles, err.Error()))
+	result := s.engineManager.Poweron(ctx, req.Path)
+
+	if !result.Success {
+		statusCode := fiber.StatusInternalServerError
+		switch result.ErrorCode {
+		case CodePoweronInvalidParams:
+			statusCode = fiber.StatusBadRequest
+		case CodePoweronPathNotExists:
+			statusCode = fiber.StatusNotFound
+		case CodePoweronIncompleteFiles:
+			statusCode = fiber.StatusBadRequest
 		}
-		return c.Status(fiber.StatusInternalServerError).JSON(
-			NewErrorResponse(CodePoweronInternalError, err.Error()))
+		return c.Status(statusCode).JSON(
+			NewErrorResponse(result.ErrorCode, result.ErrorMessage))
 	}
 
-	s.translator = translator
-	s.loadedFiles = loadedFiles
+	message := "Engine loaded successfully"
+	if result.AlreadyLoaded {
+		message = "Engine already loaded"
+	}
 
-	// Update the queue's translator
-	s.queue.SetTranslator(translator)
-
-	return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine loaded successfully"}))
+	return c.JSON(NewSuccessResponse(fiber.Map{"message": message}))
 }
 
 // poweroff handles the /poweroff endpoint
@@ -206,25 +168,9 @@ func (s *Server) poweroff(c fiber.Ctx) error {
 
 		// If not force shutdown, wait for active requests
 		if !req.Force {
-			// Wait for active requests to complete (with timeout)
-			timeout := time.After(30 * time.Second)
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-timeout:
-					Warn("Shutdown timeout reached, forcing shutdown")
-					goto shutdown
-				case <-ticker.C:
-					if atomic.LoadInt32(&s.activeReqs) == 0 {
-						goto shutdown
-					}
-				}
-			}
+			s.engineManager.WaitForIdle(&s.activeReqs, 30*time.Second)
 		}
 
-	shutdown:
 		if err := s.app.Shutdown(); err != nil {
 			Error("Error during shutdown: %v", err)
 		}
@@ -233,9 +179,8 @@ func (s *Server) poweroff(c fiber.Ctx) error {
 
 	if req.Force {
 		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Server is shutting down"}))
-	} else {
-		return c.JSON(NewErrorResponse(CodePoweroffWaitingTask, "Server is shutting down, waiting for requests to complete"))
 	}
+	return c.JSON(NewErrorResponse(CodePoweroffWaitingTask, "Server is shutting down, waiting for requests to complete"))
 }
 
 // reboot handles the /reboot endpoint
@@ -255,102 +200,34 @@ func (s *Server) reboot(c fiber.Ctx) error {
 
 	// Handle reboot in goroutine if time is specified
 	if req.Time > 0 {
-		go func() {
-			// Wait for specified time
-			time.Sleep(time.Duration(req.Time) * time.Second)
-
-			// If not force, wait for active requests to complete
-			if !req.Force {
-				timeout := time.After(30 * time.Second)
-				ticker := time.NewTicker(100 * time.Millisecond)
-				defer ticker.Stop()
-
-				for {
-					select {
-					case <-timeout:
-						Warn("Reboot timeout reached, forcing reboot")
-						goto reboot
-					case <-ticker.C:
-						if atomic.LoadInt32(&s.activeReqs) == 0 {
-							goto reboot
-						}
-					}
-				}
-			}
-
-		reboot:
-			s.mu.Lock()
-			defer s.mu.Unlock()
-
-			// Close existing translator and loaded files
-			if s.translator != nil {
-				if err := s.translator.Close(context.Background()); err != nil {
-					Error("Failed to close translator during reboot: %v", err)
-				}
-				s.translator = nil
-			}
-
-			if s.loadedFiles != nil {
-				s.loadedFiles.Close()
-				s.loadedFiles = nil
-			}
-
-			// Clear the queue's translator
-			s.queue.SetTranslator(nil)
-		}()
-
+		s.engineManager.RebootAsync(req.Time, req.Force, &s.activeReqs, nil)
 		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"}))
 	}
 
-	// If not force, wait for active requests to complete
-	if !req.Force {
-		timeout := time.After(30 * time.Second)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
+	// Immediate reboot
+	ctx := context.Background()
+	result := s.engineManager.Reboot(ctx, req.Force, &s.activeReqs)
 
-		for {
-			select {
-			case <-timeout:
-				return c.Status(fiber.StatusRequestTimeout).JSON(
-					NewErrorResponse(CodeRebootWaitingTask, "Timeout waiting for active requests to complete"))
-			case <-ticker.C:
-				if atomic.LoadInt32(&s.activeReqs) == 0 {
-					goto reboot
-				}
-			}
+	if !result.Success {
+		statusCode := fiber.StatusInternalServerError
+		if result.ErrorCode == CodeRebootWaitingTask {
+			statusCode = fiber.StatusRequestTimeout
 		}
+		return c.Status(statusCode).JSON(
+			NewErrorResponse(result.ErrorCode, result.ErrorMessage))
 	}
 
-reboot:
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Close existing translator and loaded files
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			return c.Status(fiber.StatusInternalServerError).JSON(
-				NewErrorResponse(CodeRebootInternalError, "Failed to close translator: "+err.Error()))
-		}
-		s.translator = nil
-	}
-
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	// Clear the queue's translator
-	s.queue.SetTranslator(nil)
-
+	message := "Engine rebooted successfully"
 	if req.Force {
-		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted (forced)"}))
+		message = "Engine rebooted (forced)"
 	}
-	return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted successfully"}))
+
+	return c.JSON(NewSuccessResponse(fiber.Map{"message": message}))
 }
 
 // ready handles the /ready endpoint
 func (s *Server) ready(c fiber.Ctx) error {
-	isReady := s.queue.IsReady()
+	isReady := s.engineManager.IsReady()
 	return c.JSON(NewSuccessResponse(ReadyResponse{Ready: isReady}))
 }
 
@@ -378,7 +255,7 @@ func (s *Server) compute(c fiber.Ctx) error {
 	}
 
 	// Check if engine is ready
-	if !s.queue.IsReady() {
+	if !s.engineManager.IsReady() {
 		return c.Status(fiber.StatusServiceUnavailable).JSON(
 			NewErrorResponse(CodeComputeInvalidParams, "Engine is not ready. Please call poweron first"))
 	}
@@ -392,7 +269,8 @@ func (s *Server) compute(c fiber.Ctx) error {
 
 	// Use queue for sequential processing
 	ctx := context.Background()
-	translatedText, err := s.queue.Translate(ctx, translationReq)
+	queue := s.engineManager.GetQueue()
+	translatedText, err := queue.Translate(ctx, translationReq)
 	if err != nil {
 		return c.Status(fiber.StatusInternalServerError).JSON(
 			NewErrorResponse(CodeComputeFailure, "Translation failed: "+err.Error()))
@@ -410,27 +288,7 @@ func (s *Server) ShutdownChannel() <-chan struct{} {
 
 // Close closes the server and releases resources
 func (s *Server) Close() error {
-	// Close the translation queue first
-	if s.queue != nil {
-		s.queue.Close()
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			return err
-		}
-		s.translator = nil
-	}
-
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	return nil
+	return s.engineManager.Close()
 }
 
 // Listen starts the HTTP server
@@ -461,18 +319,4 @@ func (s *Server) Listen(addr string) error {
 
 	// Return any error
 	return <-errCh
-}
-
-// containsAny checks if s contains any of the substrings
-func containsAny(s string, substrs ...string) bool {
-	for _, substr := range substrs {
-		if len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				if s[i:i+len(substr)] == substr {
-					return true
-				}
-			}
-		}
-	}
-	return false
 }
