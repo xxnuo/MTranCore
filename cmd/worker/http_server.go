@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -42,6 +43,12 @@ type PoweronRequest struct {
 type PoweroffRequest struct {
 	Time  int  `json:"time"`  // seconds to wait before shutdown
 	Force bool `json:"force"` // force shutdown without waiting for requests
+}
+
+// RebootRequest represents a reboot request
+type RebootRequest struct {
+	Time  int  `json:"time"`  // seconds to wait before reboot
+	Force bool `json:"force"` // force reboot without waiting for active requests
 }
 
 // ComputeRequest represents a compute (translation) request
@@ -95,6 +102,7 @@ func NewServer(cfg *Config) *Server {
 	app.Get("/health", server.health)
 	app.Post("/poweron", server.poweron)
 	app.Post("/poweroff", server.poweroff)
+	app.Post("/reboot", server.reboot)
 	app.Get("/ready", server.ready)
 	app.Post("/compute", server.compute)
 
@@ -228,6 +236,116 @@ func (s *Server) poweroff(c fiber.Ctx) error {
 	} else {
 		return c.JSON(NewErrorResponse(CodePoweroffWaitingTask, "Server is shutting down, waiting for requests to complete"))
 	}
+}
+
+// reboot handles the /reboot endpoint
+func (s *Server) reboot(c fiber.Ctx) error {
+	var req RebootRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		// If no body provided, use defaults
+		req.Time = 0
+		req.Force = false
+	}
+
+	// Validate parameters
+	if req.Time < 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			NewErrorResponse(CodeRebootInvalidParams, "time must be non-negative"))
+	}
+
+	// Handle reboot in goroutine if time is specified
+	if req.Time > 0 {
+		go func() {
+			// Wait for specified time
+			time.Sleep(time.Duration(req.Time) * time.Second)
+
+			// If not force, wait for active requests to complete
+			if !req.Force {
+				timeout := time.After(30 * time.Second)
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-timeout:
+						Warn("Reboot timeout reached, forcing reboot")
+						goto reboot
+					case <-ticker.C:
+						if atomic.LoadInt32(&s.activeReqs) == 0 {
+							goto reboot
+						}
+					}
+				}
+			}
+
+		reboot:
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			// Close existing translator and loaded files
+			if s.translator != nil {
+				if err := s.translator.Close(context.Background()); err != nil {
+					Error("Failed to close translator during reboot: %v", err)
+				}
+				s.translator = nil
+			}
+
+			if s.loadedFiles != nil {
+				s.loadedFiles.Close()
+				s.loadedFiles = nil
+			}
+
+			// Clear the queue's translator
+			s.queue.SetTranslator(nil)
+		}()
+
+		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"}))
+	}
+
+	// If not force, wait for active requests to complete
+	if !req.Force {
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				return c.Status(fiber.StatusRequestTimeout).JSON(
+					NewErrorResponse(CodeRebootWaitingTask, "Timeout waiting for active requests to complete"))
+			case <-ticker.C:
+				if atomic.LoadInt32(&s.activeReqs) == 0 {
+					goto reboot
+				}
+			}
+		}
+	}
+
+reboot:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Close existing translator and loaded files
+	if s.translator != nil {
+		if err := s.translator.Close(context.Background()); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(
+				NewErrorResponse(CodeRebootInternalError, "Failed to close translator: "+err.Error()))
+		}
+		s.translator = nil
+	}
+
+	if s.loadedFiles != nil {
+		s.loadedFiles.Close()
+		s.loadedFiles = nil
+	}
+
+	// Clear the queue's translator
+	s.queue.SetTranslator(nil)
+
+	if req.Force {
+		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted (forced)"}))
+	}
+	return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted successfully"}))
 }
 
 // ready handles the /ready endpoint

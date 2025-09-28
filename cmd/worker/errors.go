@@ -21,6 +21,11 @@ const (
 	CodePoweroffWaitingTask   ErrorCode = 1101
 	CodePoweroffInternalError ErrorCode = 1109
 
+	// Reboot error codes (1150-1159)
+	CodeRebootInvalidParams ErrorCode = 1150
+	CodeRebootInternalError ErrorCode = 1151
+	CodeRebootWaitingTask   ErrorCode = 1152
+
 	// Compute error codes (1200-1299)
 	CodeComputeInvalidParams ErrorCode = 1200
 	CodeComputeFailure       ErrorCode = 1201

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.5.1
 // - protoc             v6.32.1
-// source: proto/translator.proto
+// source: proto/worker.proto
 
 package proto
 
@@ -22,6 +22,7 @@ const (
 	TranslatorService_Health_FullMethodName        = "/translator.TranslatorService/Health"
 	TranslatorService_Poweron_FullMethodName       = "/translator.TranslatorService/Poweron"
 	TranslatorService_Poweroff_FullMethodName      = "/translator.TranslatorService/Poweroff"
+	TranslatorService_Reboot_FullMethodName        = "/translator.TranslatorService/Reboot"
 	TranslatorService_Ready_FullMethodName         = "/translator.TranslatorService/Ready"
 	TranslatorService_Compute_FullMethodName       = "/translator.TranslatorService/Compute"
 	TranslatorService_ComputeStream_FullMethodName = "/translator.TranslatorService/ComputeStream"
@@ -39,6 +40,8 @@ type TranslatorServiceClient interface {
 	Poweron(ctx context.Context, in *PoweronRequest, opts ...grpc.CallOption) (*PoweronResponse, error)
 	// Poweroff shuts down the server
 	Poweroff(ctx context.Context, in *PoweroffRequest, opts ...grpc.CallOption) (*PoweroffResponse, error)
+	// Reboot reloads the translation engine
+	Reboot(ctx context.Context, in *RebootRequest, opts ...grpc.CallOption) (*RebootResponse, error)
 	// Ready gets the current engine status
 	Ready(ctx context.Context, in *ReadyRequest, opts ...grpc.CallOption) (*ReadyResponse, error)
 	// Compute translates a single text
@@ -79,6 +82,16 @@ func (c *translatorServiceClient) Poweroff(ctx context.Context, in *PoweroffRequ
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PoweroffResponse)
 	err := c.cc.Invoke(ctx, TranslatorService_Poweroff_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *translatorServiceClient) Reboot(ctx context.Context, in *RebootRequest, opts ...grpc.CallOption) (*RebootResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RebootResponse)
+	err := c.cc.Invoke(ctx, TranslatorService_Reboot_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,6 +143,8 @@ type TranslatorServiceServer interface {
 	Poweron(context.Context, *PoweronRequest) (*PoweronResponse, error)
 	// Poweroff shuts down the server
 	Poweroff(context.Context, *PoweroffRequest) (*PoweroffResponse, error)
+	// Reboot reloads the translation engine
+	Reboot(context.Context, *RebootRequest) (*RebootResponse, error)
 	// Ready gets the current engine status
 	Ready(context.Context, *ReadyRequest) (*ReadyResponse, error)
 	// Compute translates a single text
@@ -154,6 +169,9 @@ func (UnimplementedTranslatorServiceServer) Poweron(context.Context, *PoweronReq
 }
 func (UnimplementedTranslatorServiceServer) Poweroff(context.Context, *PoweroffRequest) (*PoweroffResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Poweroff not implemented")
+}
+func (UnimplementedTranslatorServiceServer) Reboot(context.Context, *RebootRequest) (*RebootResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method Reboot not implemented")
 }
 func (UnimplementedTranslatorServiceServer) Ready(context.Context, *ReadyRequest) (*ReadyResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ready not implemented")
@@ -239,6 +257,24 @@ func _TranslatorService_Poweroff_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TranslatorService_Reboot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RebootRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TranslatorServiceServer).Reboot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TranslatorService_Reboot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TranslatorServiceServer).Reboot(ctx, req.(*RebootRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TranslatorService_Ready_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ReadyRequest)
 	if err := dec(in); err != nil {
@@ -302,6 +338,10 @@ var TranslatorService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TranslatorService_Poweroff_Handler,
 		},
 		{
+			MethodName: "Reboot",
+			Handler:    _TranslatorService_Reboot_Handler,
+		},
+		{
 			MethodName: "Ready",
 			Handler:    _TranslatorService_Ready_Handler,
 		},
@@ -318,5 +358,5 @@ var TranslatorService_ServiceDesc = grpc.ServiceDesc{
 			ClientStreams: true,
 		},
 	},
-	Metadata: "proto/translator.proto",
+	Metadata: "proto/worker.proto",
 }
