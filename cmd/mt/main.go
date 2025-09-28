@@ -190,6 +190,8 @@ func discoverModelFiles(dir string) (modelPath, shortlistPath string, vocabPaths
 		return "", "", nil, err
 	}
 
+	var srcVocab, trgVocab, sharedVocab string
+
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -207,7 +209,14 @@ func discoverModelFiles(dir string) (modelPath, shortlistPath string, vocabPaths
 		}
 		// Detect vocabulary files (.spm)
 		if filepath.Ext(name) == ".spm" {
-			vocabPaths = append(vocabPaths, fullPath)
+			nameLower := strings.ToLower(name)
+			if strings.Contains(nameLower, "srcvocab") || strings.Contains(nameLower, "source") {
+				srcVocab = fullPath
+			} else if strings.Contains(nameLower, "trgvocab") || strings.Contains(nameLower, "target") {
+				trgVocab = fullPath
+			} else if strings.Contains(nameLower, "vocab") {
+				sharedVocab = fullPath
+			}
 		}
 	}
 
@@ -217,8 +226,16 @@ func discoverModelFiles(dir string) (modelPath, shortlistPath string, vocabPaths
 	if shortlistPath == "" {
 		return "", "", nil, fmt.Errorf("shortlist file (lex*.bin) not found in directory: %s", dir)
 	}
-	if len(vocabPaths) == 0 {
-		return "", "", nil, fmt.Errorf("vocabulary files (*.spm) not found in directory: %s", dir)
+
+	// Determine which vocabularies to use:
+	// 1. If shared vocab exists, prefer it (for tied-embeddings models)
+	// 2. Otherwise, use separate srcvocab and trgvocab if both exist
+	if sharedVocab != "" {
+		vocabPaths = []string{sharedVocab}
+	} else if srcVocab != "" && trgVocab != "" {
+		vocabPaths = []string{srcVocab, trgVocab}
+	} else {
+		return "", "", nil, fmt.Errorf("vocabulary files not found in directory: %s (need either shared vocab or srcvocab+trgvocab)", dir)
 	}
 
 	return modelPath, shortlistPath, vocabPaths, nil

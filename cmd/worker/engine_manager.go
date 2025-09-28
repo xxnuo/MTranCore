@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 
 	engine "github.com/xxnuo/MTranCore/engine"
 	"github.com/xxnuo/MTranCore/internal/wasm"
@@ -134,6 +135,7 @@ func CreateTranslator(ctx context.Context, cfg EngineConfig) (*engine.Translator
 func discoverModelFiles(dir string) (string, string, []string, error) {
 	var modelPath, shortlistPath string
 	var vocabPaths []string
+	var srcVocab, trgVocab, sharedVocab string
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -157,7 +159,14 @@ func discoverModelFiles(dir string) (string, string, []string, error) {
 		}
 		// Detect vocabulary files (.spm)
 		if filepath.Ext(name) == ".spm" {
-			vocabPaths = append(vocabPaths, fullPath)
+			nameLower := strings.ToLower(name)
+			if strings.Contains(nameLower, "srcvocab") || strings.Contains(nameLower, "source") {
+				srcVocab = fullPath
+			} else if strings.Contains(nameLower, "trgvocab") || strings.Contains(nameLower, "target") {
+				trgVocab = fullPath
+			} else if strings.Contains(nameLower, "vocab") {
+				sharedVocab = fullPath
+			}
 		}
 	}
 
@@ -167,8 +176,16 @@ func discoverModelFiles(dir string) (string, string, []string, error) {
 	if shortlistPath == "" {
 		return "", "", nil, fmt.Errorf("shortlist file (lex*.bin) not found in directory")
 	}
-	if len(vocabPaths) == 0 {
-		return "", "", nil, fmt.Errorf("vocabulary files (*.spm) not found in directory")
+
+	// Determine which vocabularies to use:
+	// 1. If shared vocab exists, prefer it (for tied-embeddings models)
+	// 2. Otherwise, use separate srcvocab and trgvocab if both exist
+	if sharedVocab != "" {
+		vocabPaths = []string{sharedVocab}
+	} else if srcVocab != "" && trgVocab != "" {
+		vocabPaths = []string{srcVocab, trgVocab}
+	} else {
+		return "", "", nil, fmt.Errorf("vocabulary files not found in directory (need either shared vocab or srcvocab+trgvocab)")
 	}
 
 	return modelPath, shortlistPath, vocabPaths, nil
