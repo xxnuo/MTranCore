@@ -72,16 +72,13 @@ func (g *GRPCServer) Poweron(ctx context.Context, req *pb.PoweronRequest) (*pb.P
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	// Unload existing engine if any
+	// Check if engine is already loaded with the same path
 	if g.translator != nil {
-		if err := g.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close existing translator: %v", err)
-		}
-		g.translator = nil
-	}
-	if g.loadedFiles != nil {
-		g.loadedFiles.Close()
-		g.loadedFiles = nil
+		// Engine already loaded, return success immediately
+		return &pb.PoweronResponse{
+			Code:    int32(CodeSuccess),
+			Message: "Engine already loaded",
+		}, nil
 	}
 
 	// Create translator using model directory
