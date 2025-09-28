@@ -4,9 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -20,9 +17,7 @@ import (
 // GRPCServer implements the TranslatorService gRPC interface
 type GRPCServer struct {
 	pb.UnimplementedTranslatorServiceServer
-	translator     *engine.Translator
-	loadedFiles    *engine.LoadedFiles
-	mu             sync.RWMutex
+	engineManager  *EngineManager
 	config         *Config
 	activeStreams  int32 // atomic counter for active streams
 	isShuttingDown atomic.Bool
@@ -32,8 +27,9 @@ type GRPCServer struct {
 // NewGRPCServer creates a new gRPC server instance
 func NewGRPCServer(cfg *Config) *GRPCServer {
 	return &GRPCServer{
-		config:     cfg,
-		shutdownCh: make(chan struct{}),
+		config:        cfg,
+		shutdownCh:    make(chan struct{}),
+		engineManager: NewEngineManager(cfg),
 	}
 }
 
@@ -47,65 +43,23 @@ func (g *GRPCServer) Health(ctx context.Context, req *pb.HealthRequest) (*pb.Hea
 
 // Poweron loads the translation engine with model files
 func (g *GRPCServer) Poweron(ctx context.Context, req *pb.PoweronRequest) (*pb.PoweronResponse, error) {
-	if req.Path == "" {
+	result := g.engineManager.Poweron(ctx, req.Path)
+
+	if !result.Success {
 		return &pb.PoweronResponse{
-			Code:    int32(CodePoweronInvalidParams),
-			Message: "path is required",
+			Code:    int32(result.ErrorCode),
+			Message: result.ErrorMessage,
 		}, nil
 	}
 
-	// Resolve path: if absolute, use as-is; otherwise join with work directory
-	var fullPath string
-	if filepath.IsAbs(req.Path) {
-		fullPath = req.Path
-	} else {
-		fullPath = filepath.Join(g.config.WorkDir, req.Path)
+	message := "Engine loaded successfully"
+	if result.AlreadyLoaded {
+		message = "Engine already loaded"
 	}
-
-	// Check if path exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return &pb.PoweronResponse{
-			Code:    int32(CodePoweronPathNotExists),
-			Message: "path does not exist: " + fullPath,
-		}, nil
-	}
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	// Check if engine is already loaded with the same path
-	if g.translator != nil {
-		// Engine already loaded, return success immediately
-		return &pb.PoweronResponse{
-			Code:    int32(CodeSuccess),
-			Message: "Engine already loaded",
-		}, nil
-	}
-
-	// Create translator using model directory
-	config := engine.EngineConfig{ModelDir: fullPath}
-	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
-	if err != nil {
-		// Determine error code based on error message
-		errMsg := err.Error()
-		if containsAny(errMsg, "not found", "missing") {
-			return &pb.PoweronResponse{
-				Code:    int32(CodePoweronIncompleteFiles),
-				Message: err.Error(),
-			}, nil
-		}
-		return &pb.PoweronResponse{
-			Code:    int32(CodePoweronInternalError),
-			Message: err.Error(),
-		}, nil
-	}
-
-	g.translator = translator
-	g.loadedFiles = loadedFiles
 
 	return &pb.PoweronResponse{
 		Code:    int32(CodeSuccess),
-		Message: "Engine loaded successfully",
+		Message: message,
 	}, nil
 }
 
@@ -130,25 +84,9 @@ func (g *GRPCServer) Poweroff(ctx context.Context, req *pb.PoweroffRequest) (*pb
 
 		// If not force shutdown, wait for active streams
 		if !req.Force {
-			// Wait for active streams to complete (with timeout)
-			timeout := time.After(30 * time.Second)
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-timeout:
-					Warn("Shutdown timeout reached, forcing shutdown")
-					goto shutdown
-				case <-ticker.C:
-					if atomic.LoadInt32(&g.activeStreams) == 0 {
-						goto shutdown
-					}
-				}
-			}
+			g.engineManager.WaitForIdle(&g.activeStreams, 30*time.Second)
 		}
 
-	shutdown:
 		close(g.shutdownCh)
 	}()
 
@@ -157,12 +95,11 @@ func (g *GRPCServer) Poweroff(ctx context.Context, req *pb.PoweroffRequest) (*pb
 			Code:    int32(CodeSuccess),
 			Message: "Server is shutting down",
 		}, nil
-	} else {
-		return &pb.PoweroffResponse{
-			Code:    int32(CodePoweroffWaitingTask),
-			Message: "Server is shutting down, waiting for streams to complete",
-		}, nil
 	}
+	return &pb.PoweroffResponse{
+		Code:    int32(CodePoweroffWaitingTask),
+		Message: "Server is shutting down, waiting for streams to complete",
+	}, nil
 }
 
 // Reboot reloads the translation engine
@@ -177,112 +114,37 @@ func (g *GRPCServer) Reboot(ctx context.Context, req *pb.RebootRequest) (*pb.Reb
 
 	// Handle reboot in goroutine if time is specified
 	if req.Time > 0 {
-		go func() {
-			// Wait for specified time
-			time.Sleep(time.Duration(req.Time) * time.Second)
-
-			// If not force, wait for active streams to complete
-			if !req.Force {
-				timeout := time.After(30 * time.Second)
-				ticker := time.NewTicker(100 * time.Millisecond)
-				defer ticker.Stop()
-
-				for {
-					select {
-					case <-timeout:
-						Warn("Reboot timeout reached, forcing reboot")
-						goto reboot
-					case <-ticker.C:
-						if atomic.LoadInt32(&g.activeStreams) == 0 {
-							goto reboot
-						}
-					}
-				}
-			}
-
-		reboot:
-			g.mu.Lock()
-			defer g.mu.Unlock()
-
-			// Close existing translator and loaded files
-			if g.translator != nil {
-				if err := g.translator.Close(context.Background()); err != nil {
-					Error("Failed to close translator during reboot: %v", err)
-				}
-				g.translator = nil
-			}
-
-			if g.loadedFiles != nil {
-				g.loadedFiles.Close()
-				g.loadedFiles = nil
-			}
-		}()
-
+		g.engineManager.RebootAsync(int(req.Time), req.Force, &g.activeStreams, nil)
 		return &pb.RebootResponse{
 			Code:    int32(CodeSuccess),
 			Message: "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds",
 		}, nil
 	}
 
-	// If not force, wait for active streams to complete
-	if !req.Force {
-		// Wait for active streams to complete (with timeout)
-		timeout := time.After(30 * time.Second)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
+	// Immediate reboot
+	result := g.engineManager.Reboot(ctx, req.Force, &g.activeStreams)
 
-		for {
-			select {
-			case <-timeout:
-				return &pb.RebootResponse{
-					Code:    int32(CodeRebootWaitingTask),
-					Message: "Timeout waiting for active streams to complete",
-				}, nil
-			case <-ticker.C:
-				if atomic.LoadInt32(&g.activeStreams) == 0 {
-					goto reboot
-				}
-			}
-		}
-	}
-
-reboot:
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	// Close existing translator and loaded files
-	if g.translator != nil {
-		if err := g.translator.Close(ctx); err != nil {
-			return &pb.RebootResponse{
-				Code:    int32(CodeRebootInternalError),
-				Message: "Failed to close translator: " + err.Error(),
-			}, nil
-		}
-		g.translator = nil
-	}
-
-	if g.loadedFiles != nil {
-		g.loadedFiles.Close()
-		g.loadedFiles = nil
-	}
-
-	if req.Force {
+	if !result.Success {
 		return &pb.RebootResponse{
-			Code:    int32(CodeSuccess),
-			Message: "Engine rebooted (forced)",
+			Code:    int32(result.ErrorCode),
+			Message: result.ErrorMessage,
 		}, nil
 	}
+
+	message := "Engine rebooted successfully"
+	if req.Force {
+		message = "Engine rebooted (forced)"
+	}
+
 	return &pb.RebootResponse{
 		Code:    int32(CodeSuccess),
-		Message: "Engine rebooted successfully",
+		Message: message,
 	}, nil
 }
 
 // Ready gets the current engine status
 func (g *GRPCServer) Ready(ctx context.Context, req *pb.ReadyRequest) (*pb.ReadyResponse, error) {
-	g.mu.RLock()
-	isReady := g.translator != nil
-	g.mu.RUnlock()
+	isReady := g.engineManager.IsReady()
 
 	return &pb.ReadyResponse{
 		Code:    int32(CodeSuccess),
@@ -308,10 +170,7 @@ func (g *GRPCServer) Compute(ctx context.Context, req *pb.ComputeRequest) (*pb.C
 		}, nil
 	}
 
-	g.mu.RLock()
-	translator := g.translator
-	g.mu.RUnlock()
-
+	translator := g.engineManager.GetTranslator()
 	if translator == nil {
 		return &pb.ComputeResponse{
 			Code:    int32(CodeComputeInvalidParams),
@@ -374,10 +233,7 @@ func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServ
 			continue
 		}
 
-		g.mu.RLock()
-		translator := g.translator
-		g.mu.RUnlock()
-
+		translator := g.engineManager.GetTranslator()
 		if translator == nil {
 			return stream.Send(&pb.ComputeResponse{
 				Code:    int32(CodeComputeInvalidParams),
@@ -418,20 +274,5 @@ func (g *GRPCServer) ShutdownChannel() <-chan struct{} {
 
 // Close closes the gRPC server and releases resources
 func (g *GRPCServer) Close() error {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-
-	if g.translator != nil {
-		if err := g.translator.Close(context.Background()); err != nil {
-			return err
-		}
-		g.translator = nil
-	}
-
-	if g.loadedFiles != nil {
-		g.loadedFiles.Close()
-		g.loadedFiles = nil
-	}
-
-	return nil
+	return g.engineManager.Close()
 }

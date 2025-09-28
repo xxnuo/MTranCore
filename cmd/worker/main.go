@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -19,6 +20,19 @@ import (
 
 	pb "github.com/xxnuo/MTranCore/proto"
 )
+
+// isClosedConnectionError checks if an error is related to a closed network connection
+func isClosedConnectionError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errMsg := err.Error()
+	return strings.Contains(errMsg, "use of closed network connection") ||
+		strings.Contains(errMsg, "mux: server closed") ||
+		errors.Is(err, net.ErrClosed) ||
+		strings.Contains(errMsg, "Server closed")
+}
 
 func main() {
 	// Load configuration
@@ -100,7 +114,11 @@ func main() {
 			Debug("  - ComputeStream")
 
 			if err := grpcServerInstance.Serve(grpcListener); err != nil {
-				Error("[gRPC] Server error: %v", err)
+				if isClosedConnectionError(err) {
+					Debug("[gRPC] Server stopped: %v", err)
+				} else {
+					Error("[gRPC] Server error: %v", err)
+				}
 			}
 		}()
 	}
@@ -158,7 +176,11 @@ func main() {
 
 			// Get any error
 			if err := <-errCh; err != nil {
-				Error("[HTTP/WebSocket] Server error: %v", err)
+				if isClosedConnectionError(err) {
+					Debug("[HTTP/WebSocket] Server stopped: %v", err)
+				} else {
+					Error("[HTTP/WebSocket] Server error: %v", err)
+				}
 			}
 		}()
 	}
@@ -168,7 +190,11 @@ func main() {
 	go func() {
 		defer wg.Done()
 		if err := m.Serve(); err != nil {
-			Error("[Multiplexer] Error: %v", err)
+			if isClosedConnectionError(err) {
+				Debug("[Multiplexer] Stopped: %v", err)
+			} else {
+				Error("[Multiplexer] Error: %v", err)
+			}
 		}
 	}()
 

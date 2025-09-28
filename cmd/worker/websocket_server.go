@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -21,10 +19,7 @@ import (
 // WebSocketServer represents the WebSocket server
 type WebSocketServer struct {
 	app            *fiber.App
-	translator     *engine.Translator
-	loadedFiles    *engine.LoadedFiles
-	queue          *TranslationQueue // Request queue for sequential processing
-	mu             sync.RWMutex
+	engineManager  *EngineManager
 	shutdownCh     chan struct{}
 	config         *Config
 	activeReqs     int32 // atomic counter for active requests
@@ -67,10 +62,10 @@ func NewWebSocketServer(cfg *Config) *WebSocketServer {
 	})
 
 	server := &WebSocketServer{
-		app:        app,
-		config:     cfg,
-		shutdownCh: make(chan struct{}),
-		queue:      NewTranslationQueue(), // Initialize translation queue
+		app:           app,
+		config:        cfg,
+		shutdownCh:    make(chan struct{}),
+		engineManager: NewEngineManager(cfg),
 	}
 
 	// Suppress Fiber's server logger output
@@ -159,78 +154,27 @@ func (s *WebSocketServer) handlePoweron(data json.RawMessage) WSResponse {
 		}
 	}
 
-	if req.Path == "" {
-		return WSResponse{
-			Type: "poweron",
-			Code: int(CodePoweronInvalidParams),
-			Msg:  "path is required",
-		}
-	}
-
-	// Resolve path: if absolute, use as-is; otherwise join with work directory
-	var fullPath string
-	if filepath.IsAbs(req.Path) {
-		fullPath = req.Path
-	} else {
-		fullPath = filepath.Join(s.config.WorkDir, req.Path)
-	}
-
-	// Check if path exists
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
-		return WSResponse{
-			Type: "poweron",
-			Code: int(CodePoweronPathNotExists),
-			Msg:  "path does not exist: " + fullPath,
-		}
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Unload existing engine if any
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close existing translator: %v", err)
-		}
-		s.translator = nil
-	}
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	// Create translator using model directory
 	ctx := context.Background()
-	config := engine.EngineConfig{ModelDir: fullPath}
-	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
-	if err != nil {
-		// Determine error code based on error message
-		errMsg := err.Error()
-		if containsAny(errMsg, "not found", "missing") {
-			return WSResponse{
-				Type: "poweron",
-				Code: int(CodePoweronIncompleteFiles),
-				Msg:  err.Error(),
-			}
-		}
+	result := s.engineManager.Poweron(ctx, req.Path)
+
+	if !result.Success {
 		return WSResponse{
 			Type: "poweron",
-			Code: int(CodePoweronInternalError),
-			Msg:  err.Error(),
+			Code: int(result.ErrorCode),
+			Msg:  result.ErrorMessage,
 		}
 	}
 
-	s.translator = translator
-	s.loadedFiles = loadedFiles
-
-	// Update the queue's translator
-	s.queue.SetTranslator(translator)
+	message := "Engine loaded successfully"
+	if result.AlreadyLoaded {
+		message = "Engine already loaded"
+	}
 
 	return WSResponse{
 		Type: "poweron",
 		Code: int(CodeSuccess),
 		Msg:  "success",
-		Data: fiber.Map{"message": "Engine loaded successfully"},
+		Data: fiber.Map{"message": message},
 	}
 }
 
@@ -263,25 +207,9 @@ func (s *WebSocketServer) handlePoweroff(data json.RawMessage) WSResponse {
 
 		// If not force shutdown, wait for active requests
 		if !req.Force {
-			// Wait for active requests to complete (with timeout)
-			timeout := time.After(30 * time.Second)
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-timeout:
-					Warn("Shutdown timeout reached, forcing shutdown")
-					goto shutdown
-				case <-ticker.C:
-					if atomic.LoadInt32(&s.activeReqs) == 0 {
-						goto shutdown
-					}
-				}
-			}
+			s.engineManager.WaitForIdle(&s.activeReqs, 30*time.Second)
 		}
 
-	shutdown:
 		if err := s.app.Shutdown(); err != nil {
 			Error("Error during shutdown: %v", err)
 		}
@@ -323,50 +251,7 @@ func (s *WebSocketServer) handleReboot(data json.RawMessage) WSResponse {
 
 	// Handle reboot in goroutine if time is specified
 	if req.Time > 0 {
-		go func() {
-			// Wait for specified time
-			time.Sleep(time.Duration(req.Time) * time.Second)
-
-			// If not force, wait for active requests to complete
-			if !req.Force {
-				timeout := time.After(30 * time.Second)
-				ticker := time.NewTicker(100 * time.Millisecond)
-				defer ticker.Stop()
-
-				for {
-					select {
-					case <-timeout:
-						Warn("Reboot timeout reached, forcing reboot")
-						goto reboot
-					case <-ticker.C:
-						if atomic.LoadInt32(&s.activeReqs) == 0 {
-							goto reboot
-						}
-					}
-				}
-			}
-
-		reboot:
-			s.mu.Lock()
-			defer s.mu.Unlock()
-
-			// Close existing translator and loaded files
-			if s.translator != nil {
-				if err := s.translator.Close(context.Background()); err != nil {
-					Error("Failed to close translator during reboot: %v", err)
-				}
-				s.translator = nil
-			}
-
-			if s.loadedFiles != nil {
-				s.loadedFiles.Close()
-				s.loadedFiles = nil
-			}
-
-			// Clear the queue's translator
-			s.queue.SetTranslator(nil)
-		}()
-
+		s.engineManager.RebootAsync(req.Time, req.Force, &s.activeReqs, nil)
 		return WSResponse{
 			Type: "reboot",
 			Code: int(CodeSuccess),
@@ -375,71 +260,34 @@ func (s *WebSocketServer) handleReboot(data json.RawMessage) WSResponse {
 		}
 	}
 
-	// If not force, wait for active requests to complete
-	if !req.Force {
-		timeout := time.After(30 * time.Second)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
+	// Immediate reboot
+	ctx := context.Background()
+	result := s.engineManager.Reboot(ctx, req.Force, &s.activeReqs)
 
-		for {
-			select {
-			case <-timeout:
-				return WSResponse{
-					Type: "reboot",
-					Code: int(CodeRebootWaitingTask),
-					Msg:  "Timeout waiting for active requests to complete",
-				}
-			case <-ticker.C:
-				if atomic.LoadInt32(&s.activeReqs) == 0 {
-					goto reboot
-				}
-			}
-		}
-	}
-
-reboot:
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	// Close existing translator and loaded files
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			return WSResponse{
-				Type: "reboot",
-				Code: int(CodeRebootInternalError),
-				Msg:  "Failed to close translator: " + err.Error(),
-			}
-		}
-		s.translator = nil
-	}
-
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	// Clear the queue's translator
-	s.queue.SetTranslator(nil)
-
-	if req.Force {
+	if !result.Success {
 		return WSResponse{
 			Type: "reboot",
-			Code: int(CodeSuccess),
-			Msg:  "success",
-			Data: fiber.Map{"message": "Engine rebooted (forced)"},
+			Code: int(result.ErrorCode),
+			Msg:  result.ErrorMessage,
 		}
 	}
+
+	message := "Engine rebooted successfully"
+	if req.Force {
+		message = "Engine rebooted (forced)"
+	}
+
 	return WSResponse{
 		Type: "reboot",
 		Code: int(CodeSuccess),
 		Msg:  "success",
-		Data: fiber.Map{"message": "Engine rebooted successfully"},
+		Data: fiber.Map{"message": message},
 	}
 }
 
 // handleReady handles ready message
 func (s *WebSocketServer) handleReady() WSResponse {
-	isReady := s.queue.IsReady()
+	isReady := s.engineManager.IsReady()
 
 	return WSResponse{
 		Type: "ready",
@@ -482,7 +330,7 @@ func (s *WebSocketServer) handleCompute(data json.RawMessage) WSResponse {
 	}
 
 	// Check if engine is ready
-	if !s.queue.IsReady() {
+	if !s.engineManager.IsReady() {
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
@@ -499,7 +347,8 @@ func (s *WebSocketServer) handleCompute(data json.RawMessage) WSResponse {
 
 	// Use queue for sequential processing
 	ctx := context.Background()
-	translatedText, err := s.queue.Translate(ctx, translationReq)
+	queue := s.engineManager.GetQueue()
+	translatedText, err := queue.Translate(ctx, translationReq)
 	if err != nil {
 		return WSResponse{
 			Type: "compute",
@@ -523,27 +372,7 @@ func (s *WebSocketServer) ShutdownChannel() <-chan struct{} {
 
 // Close closes the server and releases resources
 func (s *WebSocketServer) Close() error {
-	// Close the translation queue first
-	if s.queue != nil {
-		s.queue.Close()
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.translator != nil {
-		if err := s.translator.Close(context.Background()); err != nil {
-			return err
-		}
-		s.translator = nil
-	}
-
-	if s.loadedFiles != nil {
-		s.loadedFiles.Close()
-		s.loadedFiles = nil
-	}
-
-	return nil
+	return s.engineManager.Close()
 }
 
 // Listen starts the WebSocket server

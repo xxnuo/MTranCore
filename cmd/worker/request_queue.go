@@ -14,6 +14,7 @@ type TranslationQueue struct {
 	stopChan   chan struct{}
 	wg         sync.WaitGroup
 	mu         sync.RWMutex
+	closeOnce  sync.Once
 }
 
 type translationRequest struct {
@@ -117,8 +118,10 @@ func (q *TranslationQueue) processRequest(req *translationRequest) {
 
 // Close stops the queue worker
 func (q *TranslationQueue) Close() {
-	close(q.stopChan)
-	q.wg.Wait()
+	q.closeOnce.Do(func() {
+		close(q.stopChan)
+		q.wg.Wait()
+	})
 }
 
 // IsReady checks if a translator is available
