@@ -15,6 +15,9 @@ service TranslatorService {
   // Poweroff shuts down the server
   rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
   
+  // Reboot reloads the translation engine
+  rpc Reboot(RebootRequest) returns (RebootResponse);
+  
   // Ready gets the current engine status
   rpc Ready(ReadyRequest) returns (ReadyResponse);
   
@@ -53,6 +56,18 @@ message PoweroffRequest {
 
 // PoweroffResponse indicates shutdown status
 message PoweroffResponse {
+  int32 code = 1;
+  string message = 2;
+}
+
+// RebootRequest contains reboot parameters
+message RebootRequest {
+  int32 time = 1;   // seconds to wait before reboot
+  bool force = 2;   // force reboot without waiting for active requests
+}
+
+// RebootResponse indicates reboot status
+message RebootResponse {
   int32 code = 1;
   string message = 2;
 }

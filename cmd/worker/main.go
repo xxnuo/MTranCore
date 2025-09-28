@@ -94,6 +94,7 @@ func main() {
 			Debug("  - Health")
 			Debug("  - Poweron")
 			Debug("  - Poweroff")
+			Debug("  - Reboot")
 			Debug("  - Ready")
 			Debug("  - Compute")
 			Debug("  - ComputeStream")
@@ -115,6 +116,7 @@ func main() {
 				Debug("  GET  /health   - Health check")
 				Debug("  POST /poweron  - Load translation engine")
 				Debug("  POST /poweroff - Shutdown server")
+				Debug("  POST /reboot   - Reload translation engine")
 				Debug("  GET  /ready    - Check engine status")
 				Debug("  POST /compute  - Translate text")
 			}
@@ -124,6 +126,7 @@ func main() {
 				Debug("[WebSocket] Message types:")
 				Debug("  - poweron  - Load translation engine")
 				Debug("  - poweroff - Shutdown server")
+				Debug("  - reboot   - Reload translation engine")
 				Debug("  - ready    - Check engine status")
 				Debug("  - compute  - Translate text")
 			}

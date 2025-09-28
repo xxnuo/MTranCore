@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -72,6 +73,7 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 		app.Get("/health", server.health)
 		app.Post("/poweron", server.poweron)
 		app.Post("/poweroff", server.poweroff)
+		app.Post("/reboot", server.reboot)
 		app.Get("/ready", server.ready)
 		app.Post("/compute", server.compute)
 	}
@@ -224,6 +226,144 @@ func (s *UnifiedServer) poweroff(c fiber.Ctx) error {
 	return c.JSON(NewErrorResponse(CodePoweroffWaitingTask, "Server is shutting down, waiting for requests to complete"))
 }
 
+// reboot handles the /reboot endpoint
+func (s *UnifiedServer) reboot(c fiber.Ctx) error {
+	var req RebootRequest
+	if err := c.Bind().JSON(&req); err != nil {
+		// If no body provided, use defaults
+		req.Time = 0
+		req.Force = false
+	}
+
+	// Validate parameters
+	if req.Time < 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			NewErrorResponse(CodeRebootInvalidParams, "time must be non-negative"))
+	}
+
+	// Handle reboot in goroutine if time is specified
+	if req.Time > 0 {
+		go func() {
+			// Wait for specified time
+			time.Sleep(time.Duration(req.Time) * time.Second)
+
+			// If not force, wait for active requests to complete
+			if !req.Force {
+				timeout := time.After(30 * time.Second)
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-timeout:
+						Warn("Reboot timeout reached, forcing reboot")
+						goto reboot
+					case <-ticker.C:
+						if atomic.LoadInt32(&s.activeReqs) == 0 {
+							goto reboot
+						}
+					}
+				}
+			}
+
+		reboot:
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			// Close existing translator and loaded files
+			if s.translator != nil {
+				if err := s.translator.Close(context.Background()); err != nil {
+					Error("Failed to close translator during reboot: %v", err)
+				}
+				s.translator = nil
+			}
+
+			if s.loadedFiles != nil {
+				s.loadedFiles.Close()
+				s.loadedFiles = nil
+			}
+
+			// Clear the queue's translator
+			s.queue.SetTranslator(nil)
+
+			// Also clear gRPC service translator if exists
+			if s.grpcService != nil {
+				s.grpcService.mu.Lock()
+				if s.grpcService.translator != nil {
+					s.grpcService.translator.Close(context.Background())
+					s.grpcService.translator = nil
+				}
+				if s.grpcService.loadedFiles != nil {
+					s.grpcService.loadedFiles.Close()
+					s.grpcService.loadedFiles = nil
+				}
+				s.grpcService.mu.Unlock()
+			}
+		}()
+
+		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"}))
+	}
+
+	// If not force, wait for active requests to complete
+	if !req.Force {
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				return c.Status(fiber.StatusRequestTimeout).JSON(
+					NewErrorResponse(CodeRebootWaitingTask, "Timeout waiting for active requests to complete"))
+			case <-ticker.C:
+				if atomic.LoadInt32(&s.activeReqs) == 0 {
+					goto reboot
+				}
+			}
+		}
+	}
+
+reboot:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Close existing translator and loaded files
+	if s.translator != nil {
+		if err := s.translator.Close(context.Background()); err != nil {
+			return c.Status(fiber.StatusInternalServerError).JSON(
+				NewErrorResponse(CodeRebootInternalError, "Failed to close translator: "+err.Error()))
+		}
+		s.translator = nil
+	}
+
+	if s.loadedFiles != nil {
+		s.loadedFiles.Close()
+		s.loadedFiles = nil
+	}
+
+	// Clear the queue's translator
+	s.queue.SetTranslator(nil)
+
+	// Also clear gRPC service translator if exists
+	if s.grpcService != nil {
+		s.grpcService.mu.Lock()
+		if s.grpcService.translator != nil {
+			s.grpcService.translator.Close(context.Background())
+			s.grpcService.translator = nil
+		}
+		if s.grpcService.loadedFiles != nil {
+			s.grpcService.loadedFiles.Close()
+			s.grpcService.loadedFiles = nil
+		}
+		s.grpcService.mu.Unlock()
+	}
+
+	if req.Force {
+		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted (forced)"}))
+	}
+	return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine rebooted successfully"}))
+}
+
 // ready handles the /ready endpoint
 func (s *UnifiedServer) ready(c fiber.Ctx) error {
 	isReady := s.queue.IsReady()
@@ -299,6 +439,8 @@ func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
 			response = s.handleWSPoweron(msg.Data)
 		case "poweroff":
 			response = s.handleWSPoweroff(msg.Data)
+		case "reboot":
+			response = s.handleWSReboot(msg.Data)
 		case "ready":
 			response = s.handleWSReady()
 		case "compute":
@@ -477,6 +619,168 @@ func (s *UnifiedServer) handleWSPoweroff(data json.RawMessage) WSResponse {
 		Type: "poweroff",
 		Code: int(CodePoweroffWaitingTask),
 		Msg:  "Server is shutting down, waiting for requests to complete",
+	}
+}
+
+// handleWSReboot handles reboot message
+func (s *UnifiedServer) handleWSReboot(data json.RawMessage) WSResponse {
+	var req RebootRequest
+	if err := json.Unmarshal(data, &req); err != nil {
+		// If no body provided, use defaults
+		req.Time = 0
+		req.Force = false
+	}
+
+	// Validate parameters
+	if req.Time < 0 {
+		return WSResponse{
+			Type: "reboot",
+			Code: int(CodeRebootInvalidParams),
+			Msg:  "time must be non-negative",
+		}
+	}
+
+	// Handle reboot in goroutine if time is specified
+	if req.Time > 0 {
+		go func() {
+			// Wait for specified time
+			time.Sleep(time.Duration(req.Time) * time.Second)
+
+			// If not force, wait for active requests to complete
+			if !req.Force {
+				timeout := time.After(30 * time.Second)
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-timeout:
+						Warn("Reboot timeout reached, forcing reboot")
+						goto reboot
+					case <-ticker.C:
+						if atomic.LoadInt32(&s.activeReqs) == 0 {
+							goto reboot
+						}
+					}
+				}
+			}
+
+		reboot:
+			s.mu.Lock()
+			defer s.mu.Unlock()
+
+			// Close existing translator and loaded files
+			if s.translator != nil {
+				if err := s.translator.Close(context.Background()); err != nil {
+					Error("Failed to close translator during reboot: %v", err)
+				}
+				s.translator = nil
+			}
+
+			if s.loadedFiles != nil {
+				s.loadedFiles.Close()
+				s.loadedFiles = nil
+			}
+
+			// Clear the queue's translator
+			s.queue.SetTranslator(nil)
+
+			// Also clear gRPC service translator if exists
+			if s.grpcService != nil {
+				s.grpcService.mu.Lock()
+				if s.grpcService.translator != nil {
+					s.grpcService.translator.Close(context.Background())
+					s.grpcService.translator = nil
+				}
+				if s.grpcService.loadedFiles != nil {
+					s.grpcService.loadedFiles.Close()
+					s.grpcService.loadedFiles = nil
+				}
+				s.grpcService.mu.Unlock()
+			}
+		}()
+
+		return WSResponse{
+			Type: "reboot",
+			Code: int(CodeSuccess),
+			Msg:  "success",
+			Data: fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"},
+		}
+	}
+
+	// If not force, wait for active requests to complete
+	if !req.Force {
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				return WSResponse{
+					Type: "reboot",
+					Code: int(CodeRebootWaitingTask),
+					Msg:  "Timeout waiting for active requests to complete",
+				}
+			case <-ticker.C:
+				if atomic.LoadInt32(&s.activeReqs) == 0 {
+					goto reboot
+				}
+			}
+		}
+	}
+
+reboot:
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Close existing translator and loaded files
+	if s.translator != nil {
+		if err := s.translator.Close(context.Background()); err != nil {
+			return WSResponse{
+				Type: "reboot",
+				Code: int(CodeRebootInternalError),
+				Msg:  "Failed to close translator: " + err.Error(),
+			}
+		}
+		s.translator = nil
+	}
+
+	if s.loadedFiles != nil {
+		s.loadedFiles.Close()
+		s.loadedFiles = nil
+	}
+
+	// Clear the queue's translator
+	s.queue.SetTranslator(nil)
+
+	// Also clear gRPC service translator if exists
+	if s.grpcService != nil {
+		s.grpcService.mu.Lock()
+		if s.grpcService.translator != nil {
+			s.grpcService.translator.Close(context.Background())
+			s.grpcService.translator = nil
+		}
+		if s.grpcService.loadedFiles != nil {
+			s.grpcService.loadedFiles.Close()
+			s.grpcService.loadedFiles = nil
+		}
+		s.grpcService.mu.Unlock()
+	}
+
+	if req.Force {
+		return WSResponse{
+			Type: "reboot",
+			Code: int(CodeSuccess),
+			Msg:  "success",
+			Data: fiber.Map{"message": "Engine rebooted (forced)"},
+		}
+	}
+	return WSResponse{
+		Type: "reboot",
+		Code: int(CodeSuccess),
+		Msg:  "success",
+		Data: fiber.Map{"message": "Engine rebooted successfully"},
 	}
 }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -162,6 +163,119 @@ func (g *GRPCServer) Poweroff(ctx context.Context, req *pb.PoweroffRequest) (*pb
 			Message: "Server is shutting down, waiting for streams to complete",
 		}, nil
 	}
+}
+
+// Reboot reloads the translation engine
+func (g *GRPCServer) Reboot(ctx context.Context, req *pb.RebootRequest) (*pb.RebootResponse, error) {
+	// Validate parameters
+	if req.Time < 0 {
+		return &pb.RebootResponse{
+			Code:    int32(CodeRebootInvalidParams),
+			Message: "time must be non-negative",
+		}, nil
+	}
+
+	// Handle reboot in goroutine if time is specified
+	if req.Time > 0 {
+		go func() {
+			// Wait for specified time
+			time.Sleep(time.Duration(req.Time) * time.Second)
+
+			// If not force, wait for active streams to complete
+			if !req.Force {
+				timeout := time.After(30 * time.Second)
+				ticker := time.NewTicker(100 * time.Millisecond)
+				defer ticker.Stop()
+
+				for {
+					select {
+					case <-timeout:
+						Warn("Reboot timeout reached, forcing reboot")
+						goto reboot
+					case <-ticker.C:
+						if atomic.LoadInt32(&g.activeStreams) == 0 {
+							goto reboot
+						}
+					}
+				}
+			}
+
+		reboot:
+			g.mu.Lock()
+			defer g.mu.Unlock()
+
+			// Close existing translator and loaded files
+			if g.translator != nil {
+				if err := g.translator.Close(context.Background()); err != nil {
+					Error("Failed to close translator during reboot: %v", err)
+				}
+				g.translator = nil
+			}
+
+			if g.loadedFiles != nil {
+				g.loadedFiles.Close()
+				g.loadedFiles = nil
+			}
+		}()
+
+		return &pb.RebootResponse{
+			Code:    int32(CodeSuccess),
+			Message: "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds",
+		}, nil
+	}
+
+	// If not force, wait for active streams to complete
+	if !req.Force {
+		// Wait for active streams to complete (with timeout)
+		timeout := time.After(30 * time.Second)
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-timeout:
+				return &pb.RebootResponse{
+					Code:    int32(CodeRebootWaitingTask),
+					Message: "Timeout waiting for active streams to complete",
+				}, nil
+			case <-ticker.C:
+				if atomic.LoadInt32(&g.activeStreams) == 0 {
+					goto reboot
+				}
+			}
+		}
+	}
+
+reboot:
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	// Close existing translator and loaded files
+	if g.translator != nil {
+		if err := g.translator.Close(ctx); err != nil {
+			return &pb.RebootResponse{
+				Code:    int32(CodeRebootInternalError),
+				Message: "Failed to close translator: " + err.Error(),
+			}, nil
+		}
+		g.translator = nil
+	}
+
+	if g.loadedFiles != nil {
+		g.loadedFiles.Close()
+		g.loadedFiles = nil
+	}
+
+	if req.Force {
+		return &pb.RebootResponse{
+			Code:    int32(CodeSuccess),
+			Message: "Engine rebooted (forced)",
+		}, nil
+	}
+	return &pb.RebootResponse{
+		Code:    int32(CodeSuccess),
+		Message: "Engine rebooted successfully",
+	}, nil
 }
 
 // Ready gets the current engine status

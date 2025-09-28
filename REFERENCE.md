@@ -52,7 +52,7 @@ grpc://<host>:<port>
 
 ### Service: TranslatorService
 
-The gRPC service is defined in `translator.proto`:
+The gRPC service is defined in `worker.proto`:
 
 ```proto
 service TranslatorService {
@@ -585,22 +585,22 @@ The worker service can be configured using environment variables:
 
 ### General Settings
 
-| Variable      | Default   | Description                                               |
-| ------------- | --------- | --------------------------------------------------------- |
-| `LOG_LEVEL`   | `info`    | Logging level (debug, info, warn, error)                  |
-| `WORK_DIR`    | `./`      | Working directory for relative model paths                |
-| `SERVER_HOST` | `0.0.0.0` | Server host address (shared by all enabled services)      |
-| `SERVER_PORT` | `8988`    | Server port (shared by all enabled services)              |
+| Variable      | Default   | Description                                          |
+| ------------- | --------- | ---------------------------------------------------- |
+| `LOG_LEVEL`   | `info`    | Logging level (debug, info, warn, error)             |
+| `WORK_DIR`    | `./`      | Working directory for relative model paths           |
+| `SERVER_HOST` | `0.0.0.0` | Server host address (shared by all enabled services) |
+| `SERVER_PORT` | `8988`    | Server port (shared by all enabled services)         |
 
 ### Service Control
 
 All services (HTTP, WebSocket, gRPC) run on the same port using connection multiplexing.
 
-| Variable           | Default | Description                   |
-| ------------------ | ------- | ----------------------------- |
-| `ENABLE_HTTP`      | `true`  | Enable HTTP REST API          |
-| `ENABLE_WEBSOCKET` | `true`  | Enable WebSocket API          |
-| `ENABLE_GRPC`      | `true`  | Enable gRPC API               |
+| Variable           | Default | Description          |
+| ------------------ | ------- | -------------------- |
+| `ENABLE_HTTP`      | `true`  | Enable HTTP REST API |
+| `ENABLE_WEBSOCKET` | `true`  | Enable WebSocket API |
+| `ENABLE_GRPC`      | `true`  | Enable gRPC API      |
 
 ### Example Configuration
 
