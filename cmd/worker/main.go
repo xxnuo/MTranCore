@@ -16,6 +16,7 @@ import (
 	"github.com/gofiber/fiber/v3"
 	"github.com/soheilhy/cmux"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/reflection"
 
 	pb "github.com/xxnuo/MTranCore/proto"
@@ -89,7 +90,33 @@ func main() {
 	// Start gRPC server if enabled
 	if cfg.EnableGRPC {
 		grpcService = NewGRPCServer(cfg)
-		grpcServerInstance = grpc.NewServer()
+		
+		// Configure gRPC server with performance optimizations
+		grpcServerInstance = grpc.NewServer(
+			// Keepalive settings - keep connections alive to reduce handshake overhead
+			grpc.KeepaliveParams(keepalive.ServerParameters{
+				MaxConnectionIdle:     15 * time.Minute, // Close idle connections after 15 minutes
+				MaxConnectionAge:      30 * time.Minute, // Force reconnect after 30 minutes
+				MaxConnectionAgeGrace: 5 * time.Second,  // Allow 5s for pending RPCs to complete
+				Time:                  5 * time.Second,  // Send keepalive ping every 5s if no activity
+				Timeout:               1 * time.Second,  // Wait 1s for ping ack before closing
+			}),
+			grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
+				MinTime:             5 * time.Second, // Allow pings every 5s minimum
+				PermitWithoutStream: true,            // Allow pings even when no streams are active
+			}),
+			// Connection options
+			grpc.MaxConcurrentStreams(1000),        // Allow up to 1000 concurrent streams per connection
+			grpc.MaxRecvMsgSize(4 * 1024 * 1024),   // 4MB max receive message size
+			grpc.MaxSendMsgSize(4 * 1024 * 1024),   // 4MB max send message size
+			// Buffer sizes for better throughput
+			grpc.ReadBufferSize(32 * 1024),  // 32KB read buffer
+			grpc.WriteBufferSize(32 * 1024), // 32KB write buffer
+			// Initial window size for flow control
+			grpc.InitialWindowSize(1 << 20),     // 1MB initial window size (per stream)
+			grpc.InitialConnWindowSize(1 << 20), // 1MB initial connection window size
+		)
+		
 		pb.RegisterTranslatorServiceServer(grpcServerInstance, grpcService)
 		reflection.Register(grpcServerInstance)
 
