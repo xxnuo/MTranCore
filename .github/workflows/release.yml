@@ -1,0 +1,180 @@
+name: Build and Release Cross-Platform Worker
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to create release for (e.g., v1.0.0)"
+        required: true
+        type: string
+
+env:
+  GO_VERSION: "1.25.0"
+
+jobs:
+  build:
+    name: Build Cross-Platform Binaries
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Linux
+          - goos: linux
+            goarch: amd64
+            suffix: ""
+          - goos: linux
+            goarch: arm64
+            suffix: ""
+          # Windows
+          - goos: windows
+            goarch: amd64
+            suffix: ".exe"
+          - goos: windows
+            goarch: arm64
+            suffix: ".exe"
+          # macOS
+          - goos: darwin
+            goarch: amd64
+            suffix: ""
+          - goos: darwin
+            goarch: arm64
+            suffix: ""
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Generate code
+        run: |
+          go generate ./...
+
+      - name: Generate proto code
+        run: |
+          # Install protoc
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+          # Install Go plugins for protoc
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+          # Generate proto code
+          mkdir -p proto
+          protoc --go_out=. --go_opt=paths=source_relative \
+            --go-grpc_out=. --go-grpc_opt=paths=source_relative \
+            proto/worker.proto
+
+      - name: Build worker binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          mkdir -p build
+          binary_name="worker-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}"
+          go build -ldflags="-s -w" -o "build/${binary_name}" ./cmd/worker
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: worker-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: build/worker-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -name "worker-*" -type f -exec cp {} release-assets/ \;
+          ls -la release-assets/
+
+      - name: Determine tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create checksums
+        run: |
+          cd release-assets
+          sha256sum * > checksums.txt
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Release ${{ steps.tag.outputs.tag }}
+          body: |
+            ## MTranCore Worker ${{ steps.tag.outputs.tag }}
+
+            Cross-platform binaries for MTranCore Worker service.
+
+            ### Supported Platforms
+            - **Linux**: amd64, arm64
+            - **Windows**: amd64, arm64  
+            - **macOS**: amd64, arm64
+
+            ### Download
+            Choose the appropriate binary for your platform:
+            - `worker-linux-amd64` - Linux x86_64
+            - `worker-linux-arm64` - Linux ARM64
+            - `worker-windows-amd64.exe` - Windows x86_64
+            - `worker-windows-arm64.exe` - Windows ARM64
+            - `worker-darwin-amd64` - macOS Intel
+            - `worker-darwin-arm64` - macOS Apple Silicon
+
+            ### Installation
+            1. Download the appropriate binary for your platform
+            2. Make it executable (Linux/macOS): `chmod +x worker-*`
+            3. Run: `./worker-*` or `worker-*.exe`
+
+            ### Verification
+            Use the provided `checksums.txt` to verify file integrity:
+            ```bash
+            sha256sum -c checksums.txt
+            ```
+          files: |
+            release-assets/*
+          draft: false
+          prerelease: false
+          generate_release_notes: true
