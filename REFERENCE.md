@@ -602,6 +602,16 @@ All services (HTTP, WebSocket, gRPC) run on the same port using connection multi
 | `ENABLE_WEBSOCKET` | `true`  | Enable WebSocket API |
 | `ENABLE_GRPC`      | `true`  | Enable gRPC API      |
 
+### gRPC Unix Domain Socket (Advanced)
+
+For better local performance, gRPC can also listen on a Unix domain socket:
+
+| Variable           | Default | Description                                         |
+| ------------------ | ------- | --------------------------------------------------- |
+| `GRPC_UNIX_SOCKET` | (empty) | Path to Unix socket file (e.g., `/tmp/mtrancore.sock`) |
+
+When enabled, gRPC will listen on both TCP and Unix socket simultaneously. Unix domain sockets provide 20-40% better performance for local IPC by avoiding TCP/IP stack overhead.
+
 ### Example Configuration
 
 Disable WebSocket and change server port:
@@ -620,6 +630,15 @@ export ENABLE_WEBSOCKET=false
 export ENABLE_GRPC=true
 ./worker
 ```
+
+Enable gRPC with Unix socket for better local performance:
+
+```bash
+export GRPC_UNIX_SOCKET=/tmp/mtrancore.sock
+./worker
+```
+
+This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 
 ## Common Workflows
 

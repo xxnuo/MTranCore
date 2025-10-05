@@ -15,6 +15,9 @@ type Config struct {
 	ServerHost string
 	ServerPort string
 
+	// gRPC Unix socket configuration
+	GRPCUnixSocket string // Path to Unix socket file for gRPC (if enabled)
+
 	EnableHTTP      bool
 	EnableWebSocket bool
 	EnableGRPC      bool
@@ -29,6 +32,9 @@ func LoadConfig() *Config {
 		// Unified server configuration
 		ServerHost: getEnvOrDefault("SERVER_HOST", "0.0.0.0"),
 		ServerPort: getEnvOrDefault("SERVER_PORT", "8988"),
+
+		// gRPC Unix socket configuration
+		GRPCUnixSocket: getEnvOrDefault("GRPC_UNIX_SOCKET", ""),
 
 		EnableHTTP:      parseBool(getEnvOrDefault("ENABLE_HTTP", "true")),
 		EnableWebSocket: parseBool(getEnvOrDefault("ENABLE_WEBSOCKET", "true")),
