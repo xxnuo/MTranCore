@@ -143,17 +143,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: Release ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
           body: |
-            ## MTranCore Worker ${{ steps.tag.outputs.tag }}
-
-            Cross-platform binaries for MTranCore Worker service.
-
-            ### Supported Platforms
-            - **Linux**: amd64, arm64
-            - **Windows**: amd64, arm64  
-            - **macOS**: amd64, arm64
-
             ### Download
             Choose the appropriate binary for your platform:
             - `worker-linux-amd64` - Linux x86_64

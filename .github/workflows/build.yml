@@ -144,17 +144,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
-          name: Release ${{ github.event.inputs.release_tag }}
+          name: ${{ github.event.inputs.release_tag }}
           body: |
-            ## MTranCore Worker ${{ github.event.inputs.release_tag }}
-
-            Cross-platform binaries for MTranCore Worker service (Manual Build).
-
-            ### Supported Platforms
-            - **Linux**: amd64, arm64
-            - **Windows**: amd64, arm64  
-            - **macOS**: amd64, arm64
-
             ### Download
             Choose the appropriate binary for your platform:
             - `worker-linux-amd64` - Linux x86_64
