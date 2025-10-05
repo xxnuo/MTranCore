@@ -170,8 +170,9 @@ func (g *GRPCServer) Compute(ctx context.Context, req *pb.ComputeRequest) (*pb.C
 		}, nil
 	}
 
-	translator := g.engineManager.GetTranslator()
-	if translator == nil {
+	// Use the translation queue to avoid concurrent WASM execution
+	queue := g.engineManager.GetQueue()
+	if queue == nil || !queue.IsReady() {
 		return &pb.ComputeResponse{
 			Code:    int32(CodeComputeInvalidParams),
 			Message: "Engine is not ready. Please call poweron first",
@@ -185,7 +186,7 @@ func (g *GRPCServer) Compute(ctx context.Context, req *pb.ComputeRequest) (*pb.C
 		},
 	}
 
-	translatedText, err := translator.Translate(ctx, translationReq)
+	translatedText, err := queue.Translate(ctx, translationReq)
 	if err != nil {
 		return &pb.ComputeResponse{
 			Code:    int32(CodeComputeFailure),
@@ -233,8 +234,9 @@ func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServ
 			continue
 		}
 
-		translator := g.engineManager.GetTranslator()
-		if translator == nil {
+		// Use the translation queue to avoid concurrent WASM execution
+		queue := g.engineManager.GetQueue()
+		if queue == nil || !queue.IsReady() {
 			return stream.Send(&pb.ComputeResponse{
 				Code:    int32(CodeComputeInvalidParams),
 				Message: "Engine is not ready. Please call poweron first",
@@ -249,7 +251,7 @@ func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServ
 		}
 
 		ctx := stream.Context()
-		translatedText, err := translator.Translate(ctx, translationReq)
+		translatedText, err := queue.Translate(ctx, translationReq)
 		if err != nil {
 			return stream.Send(&pb.ComputeResponse{
 				Code:    int32(CodeComputeFailure),
