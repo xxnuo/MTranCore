@@ -58,13 +58,14 @@ type TestCase struct {
 }
 
 var (
-	serverURL   = flag.String("url", "http://localhost:8988", "Server URL")
-	modelPath   = flag.String("model", "", "Model directory path (if empty, uses ./models/enzh)")
-	iterations  = flag.Int("n", 100, "Number of iterations per test")
-	concurrency = flag.Int("c", 1, "Number of concurrent workers")
-	testType    = flag.String("test", "all", "Test type: all, compute, html, long, parallel")
-	protocol    = flag.String("protocol", "all", "Protocol to use: all, http, grpc, ws")
-	warmup      = flag.Int("warmup", 10, "Number of warmup requests before benchmarking")
+	serverURL      = flag.String("url", "http://localhost:8988", "Server URL")
+	modelPath      = flag.String("model", "", "Model directory path (if empty, uses ./models/enzh)")
+	iterations     = flag.Int("n", 100, "Number of iterations per test")
+	concurrency    = flag.Int("c", 1, "Number of concurrent workers")
+	testType       = flag.String("test", "all", "Test type: all, compute, html, long, parallel")
+	protocol       = flag.String("protocol", "all", "Protocol to use: all, http, grpc, grpc-unix, ws")
+	warmup         = flag.Int("warmup", 10, "Number of warmup requests before benchmarking")
+	grpcUnixSocket = flag.String("grpc-unix", "", "gRPC Unix socket path (enables gRPC Unix socket testing)")
 )
 
 // Client interface for different protocols
@@ -136,7 +137,33 @@ type GRPCClient struct {
 }
 
 func NewGRPCClient(address string) (*GRPCClient, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(address, 
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Performance optimizations matching server settings
+		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window size
+		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window size
+		grpc.WithReadBufferSize(32 * 1024),      // 32KB read buffer
+		grpc.WithWriteBufferSize(32 * 1024),     // 32KB write buffer
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &GRPCClient{
+		conn:   conn,
+		client: pb.NewTranslatorServiceClient(conn),
+	}, nil
+}
+
+// NewGRPCUnixClient creates a gRPC client using Unix domain socket
+func NewGRPCUnixClient(socketPath string) (*GRPCClient, error) {
+	conn, err := grpc.NewClient("unix://"+socketPath,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		// Performance optimizations matching server settings
+		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window size
+		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window size
+		grpc.WithReadBufferSize(32 * 1024),      // 32KB read buffer
+		grpc.WithWriteBufferSize(32 * 1024),     // 32KB write buffer
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -371,6 +398,10 @@ func main() {
 	var protocols []string
 	if *protocol == "all" {
 		protocols = []string{"http", "grpc", "ws"}
+		// Add grpc-unix if socket path is provided
+		if *grpcUnixSocket != "" {
+			protocols = append(protocols, "grpc-unix")
+		}
 	} else {
 		protocols = []string{*protocol}
 	}
@@ -527,6 +558,13 @@ func createClient(proto string) (Client, *WSClientPool, error) {
 			address = *serverURL
 		}
 		client, err := NewGRPCClient(address)
+		return client, nil, err
+
+	case "grpc-unix":
+		if *grpcUnixSocket == "" {
+			return nil, nil, fmt.Errorf("grpc-unix requires --grpc-unix flag with socket path")
+		}
+		client, err := NewGRPCUnixClient(*grpcUnixSocket)
 		return client, nil, err
 
 	case "ws":
@@ -927,30 +965,36 @@ func printComparison(allResults map[string][]BenchmarkResult) {
 			}
 		}
 
-		for _, proto := range []string{"http", "grpc", "ws"} {
-			if result, ok := protoResults[proto]; ok {
-				marker := ""
-				// Highlight the best performer
-				if result.Throughput == bestThroughput && result.AvgLatency == bestAvgLatency {
-					marker = " 🏆"
-				} else if result.Throughput == bestThroughput {
-					marker = " ⚡"
-				} else if result.AvgLatency == bestAvgLatency {
-					marker = " 🎯"
-				}
+		// Collect and sort protocol names
+		protocols := make([]string, 0, len(protoResults))
+		for proto := range protoResults {
+			protocols = append(protocols, proto)
+		}
+		sort.Strings(protocols)
 
-				successRate := float64(result.Success) / float64(result.TotalRequests) * 100
-				fmt.Printf("%-12s │ %6.1f%% │ %10.2f/s │ %10s │ %10s │ %10s │ %10s%s\n",
-					strings.ToUpper(proto),
-					successRate,
-					result.Throughput,
-					formatDuration(result.AvgLatency),
-					formatDuration(result.P50Latency),
-					formatDuration(result.P95Latency),
-					formatDuration(result.P99Latency),
-					marker,
-				)
+		for _, proto := range protocols {
+			result := protoResults[proto]
+			marker := ""
+			// Highlight the best performer
+			if result.Throughput == bestThroughput && result.AvgLatency == bestAvgLatency {
+				marker = " 🏆"
+			} else if result.Throughput == bestThroughput {
+				marker = " ⚡"
+			} else if result.AvgLatency == bestAvgLatency {
+				marker = " 🎯"
 			}
+
+			successRate := float64(result.Success) / float64(result.TotalRequests) * 100
+			fmt.Printf("%-12s │ %6.1f%% │ %10.2f/s │ %10s │ %10s │ %10s │ %10s%s\n",
+				strings.ToUpper(proto),
+				successRate,
+				result.Throughput,
+				formatDuration(result.AvgLatency),
+				formatDuration(result.P50Latency),
+				formatDuration(result.P95Latency),
+				formatDuration(result.P99Latency),
+				marker,
+			)
 		}
 
 		// Add performance difference analysis
@@ -1038,8 +1082,16 @@ func printComparison(allResults map[string][]BenchmarkResult) {
 	fmt.Printf("%-12s │ %12s │ %12s │ %10s\n", "Protocol", "Avg Throughput", "Avg Latency", "Wins")
 	fmt.Printf("─────────────┼──────────────┼──────────────┼──────────\n")
 
-	for _, proto := range []string{"http", "grpc", "ws"} {
-		if stats, ok := protocolStats[proto]; ok && stats.tests > 0 {
+	// Collect and sort protocol names
+	sortedProtocols := make([]string, 0, len(protocolStats))
+	for proto := range protocolStats {
+		sortedProtocols = append(sortedProtocols, proto)
+	}
+	sort.Strings(sortedProtocols)
+
+	for _, proto := range sortedProtocols {
+		stats := protocolStats[proto]
+		if stats.tests > 0 {
 			avgTP := stats.avgThroughput / float64(stats.tests)
 			avgLat := stats.avgLatency / time.Duration(stats.tests)
 			fmt.Printf("%-12s │ %10.2f/s │ %12s │ %d/%d\n",

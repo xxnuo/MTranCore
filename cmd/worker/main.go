@@ -148,6 +148,42 @@ func main() {
 				}
 			}
 		}()
+
+		// Start gRPC Unix socket server if configured
+		if cfg.GRPCUnixSocket != "" {
+			// Remove existing socket file if it exists
+			os.Remove(cfg.GRPCUnixSocket)
+
+			unixListener, err := net.Listen("unix", cfg.GRPCUnixSocket)
+			if err != nil {
+				Fatal("Failed to listen on Unix socket %s: %v", cfg.GRPCUnixSocket, err)
+			}
+
+			// Set socket permissions to allow connections
+			if err := os.Chmod(cfg.GRPCUnixSocket, 0666); err != nil {
+				Warn("Failed to set Unix socket permissions: %v", err)
+			}
+
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				defer unixListener.Close()
+				defer os.Remove(cfg.GRPCUnixSocket)
+
+				Info("[gRPC Unix] Starting server on %s", cfg.GRPCUnixSocket)
+				Debug("[gRPC Unix] Using same service instance as TCP gRPC")
+
+				if err := grpcServerInstance.Serve(unixListener); err != nil {
+					if isClosedConnectionError(err) {
+						Debug("[gRPC Unix] Server stopped: %v", err)
+					} else {
+						Error("[gRPC Unix] Server error: %v", err)
+					}
+				}
+			}()
+
+			Info("[gRPC Unix] Unix socket enabled: %s", cfg.GRPCUnixSocket)
+		}
 	}
 
 	// Start HTTP/WebSocket server

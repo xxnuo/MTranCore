@@ -93,6 +93,40 @@ grpcurl -plaintext -d '{"time": 0, "force": false}' \
   localhost:8988 translator.TranslatorService/Poweroff
 ```
 
+### 7. Using Unix Domain Socket (for better local performance)
+
+Enable gRPC Unix socket (server side):
+
+```bash
+# Set environment variable to enable gRPC Unix socket
+export GRPC_UNIX_SOCKET=/tmp/mtrancore.sock
+./worker
+```
+
+Enable gRPC Unix socket (client side):
+
+```bash
+# Use grpcurl to connect to Unix socket
+grpcurl -plaintext -unix /tmp/mtrancore.sock translator.TranslatorService/Health
+
+# Translate text
+grpcurl -plaintext -unix /tmp/mtrancore.sock \
+  -d '{"text": "Hello, world!", "html": false}' \
+  translator.TranslatorService/Compute
+```
+
+Use benchmark tool to test Unix socket performance:
+
+```bash
+# Test Unix socket performance
+./benchmark -protocol grpc-unix -grpc-unix /tmp/mtrancore.sock -n 1000 -c 10
+
+# Compare all protocols (including Unix socket)
+./benchmark -protocol all -grpc-unix /tmp/mtrancore.sock -n 1000 -c 10
+```
+
+**Performance tip**: For local communication, Unix domain socket is usually 20-40% faster than TCP, because it avoids the overhead of the TCP/IP protocol stack.
+
 ## WebSocket API Examples
 
 ### Use JavaScript (Browser/Node.js)
