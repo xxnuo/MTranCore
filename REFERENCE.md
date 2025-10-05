@@ -27,7 +27,7 @@ The service uses standardized error codes across all protocols:
 
 | Code | Constant                     | Description                                |
 | ---- | ---------------------------- | ------------------------------------------ |
-| 0    | `CodeSuccess`                | Operation completed successfully           |
+| 200  | `CodeSuccess`                | Operation completed successfully           |
 | 1000 | `CodePoweronInvalidParams`   | Invalid parameters for poweron request     |
 | 1001 | `CodePoweronPathNotExists`   | Model path does not exist                  |
 | 1002 | `CodePoweronIncompleteFiles` | Model files are incomplete or missing      |
@@ -231,7 +231,7 @@ Success responses:
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     /* endpoint-specific data */
   }
@@ -275,7 +275,7 @@ Load the translation engine with model files.
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "message": "Engine loaded successfully"
   }
@@ -330,7 +330,7 @@ Shut down the server gracefully or forcefully.
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "message": "Server is shutting down"
   }
@@ -354,7 +354,7 @@ Check if the translation engine is loaded and ready.
 
 ```json
 {
-  "code": 0,
+  "code": 200,
   "data": {
     "ready": true // or false
   }
@@ -437,7 +437,7 @@ All messages are JSON objects with the following structure:
 ```json
 {
   "type": "message_type", // Same as request type
-  "code": 0, // Error code
+  "code": 200, // Error code
   "msg": "success", // Message or error description
   "data": {
     /* type-specific data */
@@ -467,7 +467,7 @@ Load the translation engine with model files.
 ```json
 {
   "type": "poweron",
-  "code": 0,
+  "code": 200,
   "msg": "success",
   "data": {
     "message": "Engine loaded successfully"
@@ -498,7 +498,7 @@ Shut down the server.
 ```json
 {
   "type": "poweroff",
-  "code": 0,
+  "code": 200,
   "msg": "success",
   "data": {
     "message": "Server is shutting down"
@@ -526,7 +526,7 @@ Check if the translation engine is loaded.
 ```json
 {
   "type": "ready",
-  "code": 0,
+  "code": 200,
   "msg": "success",
   "data": {
     "ready": true
@@ -555,7 +555,7 @@ Translate text.
 ```json
 {
   "type": "compute",
-  "code": 0,
+  "code": 200,
   "msg": "success",
   "data": {
     "translated_text": "Translated text"
