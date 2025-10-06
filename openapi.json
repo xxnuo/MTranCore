@@ -101,7 +101,7 @@
                   "success": {
                     "summary": "Engine loaded successfully",
                     "value": {
-                      "code": 0,
+                      "code": 200,
                       "data": {
                         "message": "Engine loaded successfully"
                       }
@@ -214,7 +214,7 @@
                   "ready": {
                     "summary": "Engine is ready",
                     "value": {
-                      "code": 0,
+                      "code": 200,
                       "data": {
                         "ready": true
                       }
@@ -223,7 +223,7 @@
                   "not_ready": {
                     "summary": "Engine is not ready",
                     "value": {
-                      "code": 0,
+                      "code": 200,
                       "data": {
                         "ready": false
                       }
@@ -560,7 +560,7 @@
                     "summary": "Poweron success response",
                     "value": {
                       "type": "poweron",
-                      "code": 0,
+                      "code": 200,
                       "msg": "success",
                       "data": {
                         "message": "Engine loaded successfully"
@@ -571,7 +571,7 @@
                     "summary": "Compute success response",
                     "value": {
                       "type": "compute",
-                      "code": 0,
+                      "code": 200,
                       "msg": "success",
                       "data": {
                         "translated_text": "你好，世界！"
@@ -582,7 +582,7 @@
                     "summary": "Ready status response",
                     "value": {
                       "type": "ready",
-                      "code": 0,
+                      "code": 200,
                       "msg": "success",
                       "data": {
                         "ready": true
