@@ -80,59 +80,15 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Cache protoc
-        uses: actions/cache@v4
-        id: cache-protoc
-        with:
-          path: |
-            /usr/local/bin/protoc
-            /usr/local/include/google
-          key: ${{ runner.os }}-protoc-${{ hashFiles('.github/workflows/release.yml') }}
-          restore-keys: |
-            ${{ runner.os }}-protoc-
-
-      - name: Cache Go tools
-        uses: actions/cache@v4
-        with:
-          path: ~/go/bin
-          key: ${{ runner.os }}-go-tools-${{ env.GO_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-go-tools-
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Generate code
-        run: |
-          go generate ./...
-
-      - name: Install protoc
-        if: steps.cache-protoc.outputs.cache-hit != 'true'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y protobuf-compiler
-
-      - name: Install Go protoc plugins
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
-
-      - name: Generate proto code
-        run: |
-          mkdir -p proto
-          protoc --go_out=. --go_opt=paths=source_relative \
-            --go-grpc_out=. --go-grpc_opt=paths=source_relative \
-            proto/worker.proto
-
       - name: Build worker binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: ${{ matrix.cgo_enabled || '0' }}
         run: |
-          mkdir -p build
+          make actions
           binary_name="worker-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}"
-          go build -ldflags="-s -w" -o "build/${binary_name}" ./cmd/worker
+          mv build/worker "build/${binary_name}"
 
       - name: Upload binary artifact
         uses: actions/upload-artifact@v4

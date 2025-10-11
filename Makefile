@@ -29,8 +29,8 @@ prepare: gen proto
 
 build-worker:
 	@echo "Building worker server..."
-	@go build -o $(BUILD_DIR)/worker ./cmd/worker
-	@strip $(BUILD_DIR)/worker
+	@mkdir -p $(BUILD_DIR)
+	@go build -ldflags="-s -w" -o $(BUILD_DIR)/worker ./cmd/worker
 	@echo "worker server built successfully"
 
 build-benchmark:
@@ -52,6 +52,8 @@ build-mt:
 	@echo "mt (command line translation tool) built successfully"
 
 build: prepare build-worker build-benchmark build-stresstest build-mt
+
+actions: build-worker
 
 test:
 	@echo "Running all tests..."
