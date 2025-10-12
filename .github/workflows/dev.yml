@@ -146,7 +146,19 @@ jobs:
           sha256sum * > checksums.txt
           cat checksums.txt
 
-      - name: Create or Update Dev Release
+      - name: Delete old dev release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 删除旧的 dev release（如果存在）
+          if gh release view dev >/dev/null 2>&1; then
+            echo "Deleting old dev release..."
+            gh release delete dev --yes --cleanup-tag
+          else
+            echo "No existing dev release to delete"
+          fi
+
+      - name: Create Dev Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev
