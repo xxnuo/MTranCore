@@ -141,12 +141,10 @@ jobs:
             **Not recommended for production use.**
 
             ### Build Information
-            - **Branch**: dev
             - **Commit**: ${{ steps.build_info.outputs.short_sha }}
             - **Commit Date**: ${{ steps.build_info.outputs.commit_date }}
             - **Build Time**: ${{ steps.build_info.outputs.build_time }}
             - **Commit Message**: ${{ github.event.head_commit.message }}
-            ```
           files: |
             release-assets/*
           draft: false
