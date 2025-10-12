@@ -1,9 +1,9 @@
-name: Dev Pre-Release
+name: Dev Build
 
 on:
   push:
     branches:
-      - dev
+      - main
 
 env:
   GO_VERSION: "1.25.0"
@@ -97,7 +97,7 @@ jobs:
           retention-days: 1
 
   release:
-    name: Create Dev Pre-Release
+    name: Create Dev Build
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -130,16 +130,6 @@ jobs:
           cd release-assets
           sha256sum * > checksums.txt
           cat checksums.txt
-
-      - name: Delete existing dev tag and release
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # 删除远程 tag
-          git push --delete origin dev || true
-          # 删除本地 tag
-          git tag -d dev || true
 
       - name: Create or Update Dev Release
         uses: softprops/action-gh-release@v2
