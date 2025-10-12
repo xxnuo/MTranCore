@@ -50,29 +50,24 @@ jobs:
           cache: true
           cache-dependency-path: go.sum
 
-      - name: Cache Go build
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ matrix.goos }}-${{ matrix.goarch }}-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-${{ matrix.goos }}-${{ matrix.goarch }}-
-            ${{ runner.os }}-go-
-
       - name: Cache protoc
         uses: actions/cache@v4
         id: cache-protoc
         with:
-          path: /usr/local/bin/protoc
+          path: |
+            /usr/local/bin/protoc
+            /usr/local/include/google
           key: ${{ runner.os }}-protoc-${{ hashFiles('.github/workflows/dev.yml') }}
+          restore-keys: |
+            ${{ runner.os }}-protoc-
 
       - name: Cache Go tools
         uses: actions/cache@v4
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-go-tools-${{ env.GO_VERSION }}
+          restore-keys: |
+            ${{ runner.os }}-go-tools-
 
       - name: Download dependencies
         run: go mod download
