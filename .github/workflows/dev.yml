@@ -1,17 +1,9 @@
-name: Build Cross-Platform Worker (Manual)
+name: Dev Pre-Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      create_release:
-        description: "Create a GitHub release"
-        required: false
-        default: false
-        type: boolean
-      release_tag:
-        description: "Release tag (required if creating release)"
-        required: false
-        type: string
+  push:
+    branches:
+      - dev
 
 env:
   GO_VERSION: "1.25.0"
@@ -102,26 +94,18 @@ jobs:
         with:
           name: worker-${{ matrix.goos }}-${{ matrix.goarch }}
           path: build/worker-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}
-          retention-days: 7
+          retention-days: 1
 
   release:
-    name: Create Release (Optional)
+    name: Create Dev Pre-Release
     needs: build
     runs-on: ubuntu-latest
-    if: ${{ github.event.inputs.create_release == 'true' }}
     permissions:
       contents: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Validate release tag
-        run: |
-          if [ -z "${{ github.event.inputs.release_tag }}" ]; then
-            echo "Error: release_tag is required when create_release is true"
-            exit 1
-          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -134,18 +118,47 @@ jobs:
           find artifacts -name "worker-*" -type f -exec cp {} release-assets/ \;
           ls -la release-assets/
 
+      - name: Generate build info
+        id: build_info
+        run: |
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "commit_date=$(git log -1 --format=%cd --date=short)" >> $GITHUB_OUTPUT
+          echo "build_time=$(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_OUTPUT
+
       - name: Create checksums
         run: |
           cd release-assets
           sha256sum * > checksums.txt
           cat checksums.txt
 
-      - name: Create Release
+      - name: Delete existing dev tag and release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # 删除远程 tag
+          git push --delete origin dev || true
+          # 删除本地 tag
+          git tag -d dev || true
+
+      - name: Create or Update Dev Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.inputs.release_tag }}
-          name: ${{ github.event.inputs.release_tag }}
+          tag_name: dev
+          name: "Dev Pre-Release"
           body: |
+            ## ⚠️ Dev Pre-Release
+
+            This is an **automatically generated** pre-release build from the dev branch.
+            **Not recommended for production use.**
+
+            ### Build Information
+            - **Branch**: dev
+            - **Commit**: ${{ steps.build_info.outputs.short_sha }}
+            - **Commit Date**: ${{ steps.build_info.outputs.commit_date }}
+            - **Build Time**: ${{ steps.build_info.outputs.build_time }}
+            - **Commit Message**: ${{ github.event.head_commit.message }}
+
             ### Download
             Choose the appropriate binary for your platform:
             - `worker-linux-amd64` - Linux x86_64
@@ -168,5 +181,5 @@ jobs:
           files: |
             release-assets/*
           draft: false
-          prerelease: false
+          prerelease: true
           generate_release_notes: true
