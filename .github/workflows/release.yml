@@ -16,15 +16,12 @@ env:
 
 jobs:
   build:
-    name: Build Cross-Platform Binaries
+    name: Build Binary
     runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
           # Android
-          - goos: android
-            goarch: 386
-            suffix: ""
           - goos: android
             goarch: amd64
             suffix: ""
@@ -40,22 +37,6 @@ jobs:
             suffix: ""
           - goos: darwin
             goarch: arm64
-            suffix: ""
-          # FreeBSD
-          - goos: freebsd
-            goarch: 386
-            suffix: ""
-          - goos: freebsd
-            goarch: amd64
-            suffix: ""
-          - goos: freebsd
-            goarch: arm
-            suffix: ""
-          - goos: freebsd
-            goarch: arm64
-            suffix: ""
-          - goos: freebsd
-            goarch: riscv64
             suffix: ""
           # iOS
           - goos: ios
@@ -78,24 +59,9 @@ jobs:
           - goos: linux
             goarch: arm64
             suffix: ""
-          - goos: linux
-            goarch: loong64
-            suffix: ""
-          - goos: linux
-            goarch: s390x
-            suffix: ""
-          - goos: linux
-            goarch: riscv64
-            suffix: ""
           # Windows
           - goos: windows
-            goarch: 386
-            suffix: ".exe"
-          - goos: windows
             goarch: amd64
-            suffix: ".exe"
-          - goos: windows
-            goarch: arm
             suffix: ".exe"
           - goos: windows
             goarch: arm64
