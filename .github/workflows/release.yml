@@ -21,20 +21,19 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux
-          - goos: linux
+          # Android
+          - goos: android
+            goarch: 386
+            suffix: ""
+          - goos: android
             goarch: amd64
             suffix: ""
-          - goos: linux
+          - goos: android
+            goarch: arm
+            suffix: ""
+          - goos: android
             goarch: arm64
             suffix: ""
-          # Windows
-          - goos: windows
-            goarch: amd64
-            suffix: ".exe"
-          - goos: windows
-            goarch: arm64
-            suffix: ".exe"
           # macOS
           - goos: darwin
             goarch: amd64
@@ -42,6 +41,65 @@ jobs:
           - goos: darwin
             goarch: arm64
             suffix: ""
+          # FreeBSD
+          - goos: freebsd
+            goarch: 386
+            suffix: ""
+          - goos: freebsd
+            goarch: amd64
+            suffix: ""
+          - goos: freebsd
+            goarch: arm
+            suffix: ""
+          - goos: freebsd
+            goarch: arm64
+            suffix: ""
+          - goos: freebsd
+            goarch: riscv64
+            suffix: ""
+          # iOS
+          - goos: ios
+            goarch: arm64
+            suffix: ""
+          # JS
+          - goos: js
+            goarch: wasm
+            suffix: ".wasm"
+          # Linux
+          - goos: linux
+            goarch: 386
+            suffix: ""
+          - goos: linux
+            goarch: amd64
+            suffix: ""
+          - goos: linux
+            goarch: arm
+            suffix: ""
+          - goos: linux
+            goarch: arm64
+            suffix: ""
+          - goos: linux
+            goarch: loong64
+            suffix: ""
+          - goos: linux
+            goarch: s390x
+            suffix: ""
+          - goos: linux
+            goarch: riscv64
+            suffix: ""
+          # Windows
+          - goos: windows
+            goarch: 386
+            suffix: ".exe"
+          - goos: windows
+            goarch: amd64
+            suffix: ".exe"
+          - goos: windows
+            goarch: arm
+            suffix: ".exe"
+          - goos: windows
+            goarch: arm64
+            suffix: ".exe"
 
     steps:
       - name: Checkout code
