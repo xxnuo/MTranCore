@@ -145,11 +145,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: dev
-          name: "Dev Pre-Release"
+          name: "Dev Build"
           body: |
-            ## ⚠️ Dev Pre-Release
-
-            This is an **automatically generated** pre-release build from the dev branch.
+            ⚠️ This is an **automatically generated** pre-release build from the dev branch.
             **Not recommended for production use.**
 
             ### Build Information
@@ -158,25 +156,6 @@ jobs:
             - **Commit Date**: ${{ steps.build_info.outputs.commit_date }}
             - **Build Time**: ${{ steps.build_info.outputs.build_time }}
             - **Commit Message**: ${{ github.event.head_commit.message }}
-
-            ### Download
-            Choose the appropriate binary for your platform:
-            - `worker-linux-amd64` - Linux x86_64
-            - `worker-linux-arm64` - Linux ARM64
-            - `worker-windows-amd64.exe` - Windows x86_64
-            - `worker-windows-arm64.exe` - Windows ARM64
-            - `worker-darwin-amd64` - macOS Intel
-            - `worker-darwin-arm64` - macOS Apple Silicon
-
-            ### Installation
-            1. Download the appropriate binary for your platform
-            2. Make it executable (Linux/macOS): `chmod +x worker-*`
-            3. Run: `./worker-*` or `worker-*.exe`
-
-            ### Verification
-            Use the provided `checksums.txt` to verify file integrity:
-            ```bash
-            sha256sum -c checksums.txt
             ```
           files: |
             release-assets/*
