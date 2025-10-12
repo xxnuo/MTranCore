@@ -1,4 +1,4 @@
-name: Build and Release Cross-Platform Worker
+name: Release
 
 on:
   push:
