@@ -26,15 +26,15 @@ jobs:
     strategy:
       matrix:
         include:
-          # Android (requires CGO)
-          - goos: android
-            goarch: amd64
-            suffix: ""
-            cgo_enabled: "1"
-          - goos: android
-            goarch: arm64
-            suffix: ""
-            cgo_enabled: "1"
+          # # Android (requires CGO)
+          # - goos: android
+          #   goarch: amd64
+          #   suffix: ""
+          #   cgo_enabled: "1"
+          # - goos: android
+          #   goarch: arm64
+          #   suffix: ""
+          #   cgo_enabled: "1"
           # macOS
           - goos: darwin
             goarch: amd64
@@ -42,11 +42,11 @@ jobs:
           - goos: darwin
             goarch: arm64
             suffix: ""
-          # iOS (requires CGO)
-          - goos: ios
-            goarch: arm64
-            suffix: ""
-            cgo_enabled: "1"
+          # # iOS (requires CGO)
+          # - goos: ios
+          #   goarch: arm64
+          #   suffix: ""
+          #   cgo_enabled: "1"
           # JS
           - goos: js
             goarch: wasm
