@@ -32,10 +32,6 @@ jobs:
             suffix: ""
             cgo_enabled: "1"
           - goos: android
-            goarch: arm
-            suffix: ""
-            cgo_enabled: "1"
-          - goos: android
             goarch: arm64
             suffix: ""
             cgo_enabled: "1"
@@ -61,9 +57,6 @@ jobs:
             suffix: ""
           - goos: linux
             goarch: amd64
-            suffix: ""
-          - goos: linux
-            goarch: arm
             suffix: ""
           - goos: linux
             goarch: arm64
