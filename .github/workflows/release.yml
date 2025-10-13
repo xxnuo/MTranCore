@@ -21,16 +21,19 @@ jobs:
     strategy:
       matrix:
         include:
-          # Android
+          # Android (requires CGO)
           - goos: android
             goarch: amd64
             suffix: ""
+            cgo_enabled: "1"
           - goos: android
             goarch: arm
             suffix: ""
+            cgo_enabled: "1"
           - goos: android
             goarch: arm64
             suffix: ""
+            cgo_enabled: "1"
           # macOS
           - goos: darwin
             goarch: amd64
@@ -38,10 +41,12 @@ jobs:
           - goos: darwin
             goarch: arm64
             suffix: ""
-          # iOS
+            cgo_enabled: "0"
+          # iOS (requires CGO)
           - goos: ios
             goarch: arm64
             suffix: ""
+            cgo_enabled: "1"
           # JS
           - goos: js
             goarch: wasm
@@ -113,7 +118,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
+          CGO_ENABLED: ${{ matrix.cgo_enabled }}
         run: |
           mkdir -p build
           binary_name="worker-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.suffix }}"
