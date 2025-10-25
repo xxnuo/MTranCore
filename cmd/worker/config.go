@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"os"
 	"strconv"
 	"strings"
@@ -23,22 +24,50 @@ type Config struct {
 	EnableGRPC      bool
 }
 
-// LoadConfig loads configuration from environment variables
+// LoadConfig loads configuration with priority: CLI flags > environment variables > defaults
 func LoadConfig() *Config {
+	// Define command line flags
+	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
+	workDir := flag.String("work-dir", "", "Working directory")
+	serverHost := flag.String("host", "", "Server host address")
+	serverPort := flag.String("port", "", "Server port")
+	grpcUnixSocket := flag.String("grpc-unix-socket", "", "Path to Unix socket file for gRPC")
+	enableHTTP := flag.String("enable-http", "", "Enable HTTP server (true/false)")
+	enableWebSocket := flag.String("enable-websocket", "", "Enable WebSocket server (true/false)")
+	enableGRPC := flag.String("enable-grpc", "", "Enable gRPC server (true/false)")
+
+	flag.Parse()
+
+	// Helper function to get value with priority: flag > env > default
+	getConfigValue := func(flagValue, envKey, defaultValue string) string {
+		if flagValue != "" {
+			return flagValue
+		}
+		return getEnvOrDefault(envKey, defaultValue)
+	}
+
+	// Helper function to get boolean value with priority
+	getBoolConfigValue := func(flagValue, envKey, defaultValue string) bool {
+		if flagValue != "" {
+			return parseBool(flagValue)
+		}
+		return parseBool(getEnvOrDefault(envKey, defaultValue))
+	}
+
 	return &Config{
-		LogLevel: getEnvOrDefault("LOG_LEVEL", "info"),
-		WorkDir:  getEnvOrDefault("WORK_DIR", "./"),
+		LogLevel: getConfigValue(*logLevel, "LOG_LEVEL", "info"),
+		WorkDir:  getConfigValue(*workDir, "WORK_DIR", "./"),
 
 		// Unified server configuration
-		ServerHost: getEnvOrDefault("SERVER_HOST", "0.0.0.0"),
-		ServerPort: getEnvOrDefault("SERVER_PORT", "8988"),
+		ServerHost: getConfigValue(*serverHost, "SERVER_HOST", "0.0.0.0"),
+		ServerPort: getConfigValue(*serverPort, "SERVER_PORT", "8988"),
 
 		// gRPC Unix socket configuration
-		GRPCUnixSocket: getEnvOrDefault("GRPC_UNIX_SOCKET", ""),
+		GRPCUnixSocket: getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", ""),
 
-		EnableHTTP:      parseBool(getEnvOrDefault("ENABLE_HTTP", "true")),
-		EnableWebSocket: parseBool(getEnvOrDefault("ENABLE_WEBSOCKET", "true")),
-		EnableGRPC:      parseBool(getEnvOrDefault("ENABLE_GRPC", "true")),
+		EnableHTTP:      getBoolConfigValue(*enableHTTP, "ENABLE_HTTP", "true"),
+		EnableWebSocket: getBoolConfigValue(*enableWebSocket, "ENABLE_WEBSOCKET", "true"),
+		EnableGRPC:      getBoolConfigValue(*enableGRPC, "ENABLE_GRPC", "true"),
 	}
 }
 
