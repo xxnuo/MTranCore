@@ -37,7 +37,7 @@ func isClosedConnectionError(err error) bool {
 
 func main() {
 	// Load configuration
-	cfg := LoadConfig()
+	cfg := GetConfig()
 
 	// Initialize unified logger
 	InitLogger(cfg.LogLevel)
