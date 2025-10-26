@@ -24,8 +24,8 @@ type Config struct {
 	EnableGRPC      bool
 }
 
-// LoadConfig loads configuration with priority: CLI flags > environment variables > defaults
-func LoadConfig() *Config {
+// GetConfig loads configuration with priority: CLI flags > environment variables > defaults
+func GetConfig() *Config {
 	// Define command line flags
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	workDir := flag.String("work-dir", "", "Working directory")
