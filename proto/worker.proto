@@ -37,9 +37,13 @@ message HealthResponse {
   string message = 2;
 }
 
-// PoweronRequest contains the path to model directory
+// PoweronRequest contains the path to model directory or individual file paths
 message PoweronRequest {
-  string path = 1;
+  string path = 1;                            // Path to model directory (optional if individual paths provided)
+  string model_path = 2;                      // Path to model file (optional, takes priority over path)
+  string lexical_shortlist_path = 3;          // Path to lexical shortlist file (optional, takes priority over path)
+  string vocabulary_path = 4;                 // Path to vocabulary file (optional, merged with vocabulary_paths)
+  repeated string vocabulary_paths = 5;       // Paths to vocabulary files (optional, merged with vocabulary_path)
 }
 
 // PoweronResponse indicates whether the engine loaded successfully

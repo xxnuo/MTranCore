@@ -89,11 +89,40 @@ curl http://localhost:8988/health
 
 ### 2. Load Translation Engine
 
+#### Option 1: Using Model Directory Path
+
 ```bash
 curl -X POST http://localhost:8988/poweron \
   -H "Content-Type: application/json" \
   -d '{"path": "models/enzh"}'
 ```
+
+#### Option 2: Using Individual File Paths
+
+```bash
+# With single vocabulary file
+curl -X POST http://localhost:8988/poweron \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
+  }'
+
+# With dual vocabulary files
+curl -X POST http://localhost:8988/poweron \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+    "vocabulary_paths": [
+      "models/enzh/srcvocab.enzh.spm",
+      "models/enzh/trgvocab.enzh.spm"
+    ]
+  }'
+```
+
+**Note**: Individual file paths take priority over the `path` parameter. You can also combine `vocabulary_path` and `vocabulary_paths` - they will be merged with `vocabulary_path` first.
 
 ### 3. Check Ready Status
 
@@ -135,9 +164,32 @@ grpcurl -plaintext localhost:8988 translator.TranslatorService/Health
 
 ### 2. Load Translation Engine
 
+#### Option 1: Using Model Directory Path
+
 ```bash
 grpcurl -plaintext -d '{"path": "models/enzh"}' \
   localhost:8988 translator.TranslatorService/Poweron
+```
+
+#### Option 2: Using Individual File Paths
+
+```bash
+# With single vocabulary file
+grpcurl -plaintext -d '{
+  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+  "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
+}' localhost:8988 translator.TranslatorService/Poweron
+
+# With dual vocabulary files
+grpcurl -plaintext -d '{
+  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+  "vocabulary_paths": [
+    "models/enzh/srcvocab.enzh.spm",
+    "models/enzh/trgvocab.enzh.spm"
+  ]
+}' localhost:8988 translator.TranslatorService/Poweron
 ```
 
 ### 3. Check Ready Status
@@ -214,11 +266,21 @@ const ws = new WebSocket('ws://localhost:8988/ws');
 ws.onopen = () => {
   console.log('Connected');
   
-  // 1. Load Engine
+  // 1. Load Engine (Option 1: using directory path)
   ws.send(JSON.stringify({
     type: 'poweron',
     data: { path: 'models/enzh' }
   }));
+  
+  // Alternative: Load Engine (Option 2: using individual file paths)
+  // ws.send(JSON.stringify({
+  //   type: 'poweron',
+  //   data: {
+  //     model_path: 'models/enzh/model.enzh.intgemm.alphas.bin',
+  //     lexical_shortlist_path: 'models/enzh/lex.50.50.enzh.s2t.bin',
+  //     vocabulary_path: 'models/enzh/single_vocab.enzh.spm'
+  //   }
+  // }));
 };
 
 ws.onmessage = (event) => {

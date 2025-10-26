@@ -43,7 +43,15 @@ func (g *GRPCServer) Health(ctx context.Context, req *pb.HealthRequest) (*pb.Hea
 
 // Poweron loads the translation engine with model files
 func (g *GRPCServer) Poweron(ctx context.Context, req *pb.PoweronRequest) (*pb.PoweronResponse, error) {
-	result := g.engineManager.Poweron(ctx, req.Path)
+	poweronReq := PoweronRequest{
+		Path:                 req.Path,
+		ModelPath:            req.ModelPath,
+		LexicalShortlistPath: req.LexicalShortlistPath,
+		VocabularyPath:       req.VocabularyPath,
+		VocabularyPaths:      req.VocabularyPaths,
+	}
+	
+	result := g.engineManager.PoweronWithRequest(ctx, poweronReq)
 
 	if !result.Success {
 		return &pb.PoweronResponse{

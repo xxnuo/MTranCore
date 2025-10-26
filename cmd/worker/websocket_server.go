@@ -155,7 +155,7 @@ func (s *WebSocketServer) handlePoweron(data json.RawMessage) WSResponse {
 	}
 
 	ctx := context.Background()
-	result := s.engineManager.Poweron(ctx, req.Path)
+	result := s.engineManager.PoweronWithRequest(ctx, req)
 
 	if !result.Success {
 		return WSResponse{

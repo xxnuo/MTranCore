@@ -65,17 +65,16 @@ func (em *EngineManager) ResolvePath(path string) (string, ErrorCode, string) {
 	return fullPath, CodeSuccess, ""
 }
 
-// Poweron loads the translation engine with model files
-func (em *EngineManager) Poweron(ctx context.Context, path string) PoweronResult {
-	fullPath, errCode, errMsg := em.ResolvePath(path)
-	if errCode != CodeSuccess {
-		return PoweronResult{
-			Success:      false,
-			ErrorCode:    errCode,
-			ErrorMessage: errMsg,
-		}
+// resolveFilePath resolves a file path (absolute or relative to work directory)
+func (em *EngineManager) resolveFilePath(path string) string {
+	if filepath.IsAbs(path) {
+		return path
 	}
+	return filepath.Join(em.config.WorkDir, path)
+}
 
+// PoweronWithRequest loads the translation engine with the PoweronRequest
+func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequest) PoweronResult {
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
@@ -91,8 +90,69 @@ func (em *EngineManager) Poweron(ctx context.Context, path string) PoweronResult
 	// Unload existing engine if any
 	em.unloadEngineLocked()
 
-	// Create translator using model directory
-	config := engine.EngineConfig{ModelDir: fullPath}
+	var config engine.EngineConfig
+
+	// Priority: individual file paths > path
+	if req.ModelPath != "" || req.LexicalShortlistPath != "" || 
+	   req.VocabularyPath != "" || len(req.VocabularyPaths) > 0 {
+		// Use individual file paths
+		if req.ModelPath == "" {
+			return PoweronResult{
+				Success:      false,
+				ErrorCode:    CodePoweronInvalidParams,
+				ErrorMessage: "model_path is required when using individual file paths",
+			}
+		}
+		if req.LexicalShortlistPath == "" {
+			return PoweronResult{
+				Success:      false,
+				ErrorCode:    CodePoweronInvalidParams,
+				ErrorMessage: "lexical_shortlist_path is required when using individual file paths",
+			}
+		}
+
+		// Merge vocabulary_path and vocabulary_paths
+		vocabPaths := []string{}
+		if req.VocabularyPath != "" {
+			vocabPaths = append(vocabPaths, req.VocabularyPath)
+		}
+		vocabPaths = append(vocabPaths, req.VocabularyPaths...)
+
+		if len(vocabPaths) == 0 {
+			return PoweronResult{
+				Success:      false,
+				ErrorCode:    CodePoweronInvalidParams,
+				ErrorMessage: "at least one vocabulary path is required (vocabulary_path or vocabulary_paths)",
+			}
+		}
+
+		// Resolve paths (make absolute if relative)
+		modelPath := em.resolveFilePath(req.ModelPath)
+		shortlistPath := em.resolveFilePath(req.LexicalShortlistPath)
+		resolvedVocabPaths := make([]string, len(vocabPaths))
+		for i, vp := range vocabPaths {
+			resolvedVocabPaths[i] = em.resolveFilePath(vp)
+		}
+
+		config = engine.EngineConfig{
+			ModelPath:            modelPath,
+			LexicalShortlistPath: shortlistPath,
+			VocabularyPaths:      resolvedVocabPaths,
+		}
+	} else {
+		// Use path (model directory)
+		fullPath, errCode, errMsg := em.ResolvePath(req.Path)
+		if errCode != CodeSuccess {
+			return PoweronResult{
+				Success:      false,
+				ErrorCode:    errCode,
+				ErrorMessage: errMsg,
+			}
+		}
+		config = engine.EngineConfig{ModelDir: fullPath}
+	}
+
+	// Create translator
 	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
 	if err != nil {
 		// Determine error code based on error message
@@ -123,6 +183,11 @@ func (em *EngineManager) Poweron(ctx context.Context, path string) PoweronResult
 		Success:   true,
 		ErrorCode: CodeSuccess,
 	}
+}
+
+// Poweron loads the translation engine with model files (backward compatibility)
+func (em *EngineManager) Poweron(ctx context.Context, path string) PoweronResult {
+	return em.PoweronWithRequest(ctx, PoweronRequest{Path: path})
 }
 
 // Reboot reloads the translation engine

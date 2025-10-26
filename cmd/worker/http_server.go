@@ -31,7 +31,11 @@ func (s *Server) GetApp() *fiber.App {
 
 // PoweronRequest represents a poweron request
 type PoweronRequest struct {
-	Path string `json:"path"`
+	Path                  string   `json:"path,omitempty"`
+	ModelPath             string   `json:"model_path,omitempty"`
+	LexicalShortlistPath  string   `json:"lexical_shortlist_path,omitempty"`
+	VocabularyPath        string   `json:"vocabulary_path,omitempty"`
+	VocabularyPaths       []string `json:"vocabulary_paths,omitempty"`
 }
 
 // PoweroffRequest represents a poweroff request
@@ -118,7 +122,7 @@ func (s *Server) poweron(c fiber.Ctx) error {
 	}
 
 	ctx := context.Background()
-	result := s.engineManager.Poweron(ctx, req.Path)
+	result := s.engineManager.PoweronWithRequest(ctx, req)
 
 	if !result.Success {
 		statusCode := fiber.StatusInternalServerError

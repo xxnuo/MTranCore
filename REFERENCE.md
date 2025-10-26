@@ -90,7 +90,11 @@ Load the translation engine with model files.
 
 ```proto
 message PoweronRequest {
-  string path = 1;  // Path to model directory (absolute or relative to work_dir)
+  string path = 1;                            // Path to model directory (optional if individual paths provided)
+  string model_path = 2;                      // Path to model file (optional, takes priority over path)
+  string lexical_shortlist_path = 3;          // Path to lexical shortlist file (optional, takes priority over path)
+  string vocabulary_path = 4;                 // Path to vocabulary file (optional, merged with vocabulary_paths)
+  repeated string vocabulary_paths = 5;       // Paths to vocabulary files (optional, merged with vocabulary_path)
 }
 ```
 
@@ -103,9 +107,16 @@ message PoweronResponse {
 }
 ```
 
+**Parameter Priority**:
+
+Individual file paths take priority over `path`. When any of `model_path`, `lexical_shortlist_path`, `vocabulary_path`, or `vocabulary_paths` is provided:
+- `model_path` and `lexical_shortlist_path` are required
+- `vocabulary_path` and `vocabulary_paths` are merged (vocabulary_path first)
+- All paths can be absolute or relative to work_dir
+
 **Error Codes**:
 
-- `1000`: Path is required
+- `1000`: Path is required or individual file paths are incomplete
 - `1001`: Path does not exist
 - `1002`: Model files are incomplete
 - `1003`: Internal error loading engine
@@ -265,11 +276,35 @@ Load the translation engine with model files.
 
 **Request Body**:
 
+Option 1: Using model directory path
 ```json
 {
   "path": "path/to/model" // Absolute or relative to work_dir
 }
 ```
+
+Option 2: Using individual file paths (takes priority over path)
+```json
+{
+  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+  "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
+}
+```
+
+Option 3: Using individual file paths with dual vocabularies
+```json
+{
+  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+  "vocabulary_paths": [
+    "models/enzh/srcvocab.enzh.spm",
+    "models/enzh/trgvocab.enzh.spm"
+  ]
+}
+```
+
+**Note**: `vocabulary_path` and `vocabulary_paths` can be used together and will be merged (vocabulary_path first).
 
 **Success Response**: HTTP 200
 
@@ -288,7 +323,7 @@ Load the translation engine with model files.
   ```json
   {
     "code": 1000,
-    "message": "path is required"
+    "message": "path is required" // or "model_path is required when using individual file paths"
   }
   ```
 - HTTP 404 (Path not found):
@@ -453,11 +488,39 @@ Load the translation engine with model files.
 
 **Client Message**:
 
+Option 1: Using model directory path
 ```json
 {
   "type": "poweron",
   "data": {
     "path": "path/to/model"
+  }
+}
+```
+
+Option 2: Using individual file paths (takes priority over path)
+```json
+{
+  "type": "poweron",
+  "data": {
+    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
+  }
+}
+```
+
+Option 3: Using individual file paths with dual vocabularies
+```json
+{
+  "type": "poweron",
+  "data": {
+    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
+    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
+    "vocabulary_paths": [
+      "models/enzh/srcvocab.enzh.spm",
+      "models/enzh/trgvocab.enzh.spm"
+    ]
   }
 }
 ```

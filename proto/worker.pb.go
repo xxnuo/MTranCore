@@ -111,12 +111,16 @@ func (x *HealthResponse) GetMessage() string {
 	return ""
 }
 
-// PoweronRequest contains the path to model directory
+// PoweronRequest contains the path to model directory or individual file paths
 type PoweronRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	Path                 string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`                                                               // Path to model directory (optional if individual paths provided)
+	ModelPath            string                 `protobuf:"bytes,2,opt,name=model_path,json=modelPath,proto3" json:"model_path,omitempty"`                                    // Path to model file (optional, takes priority over path)
+	LexicalShortlistPath string                 `protobuf:"bytes,3,opt,name=lexical_shortlist_path,json=lexicalShortlistPath,proto3" json:"lexical_shortlist_path,omitempty"` // Path to lexical shortlist file (optional, takes priority over path)
+	VocabularyPath       string                 `protobuf:"bytes,4,opt,name=vocabulary_path,json=vocabularyPath,proto3" json:"vocabulary_path,omitempty"`                     // Path to vocabulary file (optional, merged with vocabulary_paths)
+	VocabularyPaths      []string               `protobuf:"bytes,5,rep,name=vocabulary_paths,json=vocabularyPaths,proto3" json:"vocabulary_paths,omitempty"`                  // Paths to vocabulary files (optional, merged with vocabulary_path)
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *PoweronRequest) Reset() {
@@ -154,6 +158,34 @@ func (x *PoweronRequest) GetPath() string {
 		return x.Path
 	}
 	return ""
+}
+
+func (x *PoweronRequest) GetModelPath() string {
+	if x != nil {
+		return x.ModelPath
+	}
+	return ""
+}
+
+func (x *PoweronRequest) GetLexicalShortlistPath() string {
+	if x != nil {
+		return x.LexicalShortlistPath
+	}
+	return ""
+}
+
+func (x *PoweronRequest) GetVocabularyPath() string {
+	if x != nil {
+		return x.VocabularyPath
+	}
+	return ""
+}
+
+func (x *PoweronRequest) GetVocabularyPaths() []string {
+	if x != nil {
+		return x.VocabularyPaths
+	}
+	return nil
 }
 
 // PoweronResponse indicates whether the engine loaded successfully
@@ -642,9 +674,14 @@ const file_proto_worker_proto_rawDesc = "" +
 	"\rHealthRequest\">\n" +
 	"\x0eHealthResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"$\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\xcd\x01\n" +
 	"\x0ePoweronRequest\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\"?\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1d\n" +
+	"\n" +
+	"model_path\x18\x02 \x01(\tR\tmodelPath\x124\n" +
+	"\x16lexical_shortlist_path\x18\x03 \x01(\tR\x14lexicalShortlistPath\x12'\n" +
+	"\x0fvocabulary_path\x18\x04 \x01(\tR\x0evocabularyPath\x12)\n" +
+	"\x10vocabulary_paths\x18\x05 \x03(\tR\x0fvocabularyPaths\"?\n" +
 	"\x0fPoweronResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\";\n" +

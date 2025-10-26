@@ -148,6 +148,113 @@ func TestServer_Poweron_Success(t *testing.T) {
 	}
 }
 
+func TestServer_Poweron_IndividualPaths(t *testing.T) {
+	modelPath, shortlistPath, vocabPaths, err := getTestModelPaths()
+	if err != nil {
+		t.Skipf("Skipping test, model files not available: %v", err)
+	}
+
+	cfg := &Config{WorkDir: "./"}
+	server := NewServer(cfg)
+	defer server.Close()
+
+	// Test with individual file paths
+	reqBody := PoweronRequest{
+		ModelPath:            modelPath,
+		LexicalShortlistPath: shortlistPath,
+		VocabularyPaths:      vocabPaths,
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/poweron", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := server.GetApp().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Status code = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
+	}
+
+	var result StandardResponse
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if result.Code != CodeSuccess {
+		t.Errorf("Code = %d, want %d", result.Code, CodeSuccess)
+	}
+
+	// Verify ready shows engine loaded
+	readyReq := httptest.NewRequest("GET", "/ready", nil)
+	readyResp, err := server.GetApp().Test(readyReq)
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer readyResp.Body.Close()
+
+	var readyResult StandardResponse
+	if err := json.NewDecoder(readyResp.Body).Decode(&readyResult); err != nil {
+		t.Fatalf("Failed to decode ready response: %v", err)
+	}
+
+	readyData, _ := readyResult.Data.(map[string]interface{})
+	if ready, ok := readyData["ready"].(bool); !ok || !ready {
+		t.Errorf("ready = %v, want true", readyData["ready"])
+	}
+}
+
+func TestServer_Poweron_VocabularyPathMerge(t *testing.T) {
+	modelPath, shortlistPath, vocabPaths, err := getTestModelPaths()
+	if err != nil {
+		t.Skipf("Skipping test, model files not available: %v", err)
+	}
+
+	if len(vocabPaths) < 2 {
+		t.Skip("Test requires at least 2 vocabulary files")
+	}
+
+	cfg := &Config{WorkDir: "./"}
+	server := NewServer(cfg)
+	defer server.Close()
+
+	// Test vocabulary_path and vocabulary_paths merging
+	reqBody := PoweronRequest{
+		ModelPath:            modelPath,
+		LexicalShortlistPath: shortlistPath,
+		VocabularyPath:       vocabPaths[0],
+		VocabularyPaths:      vocabPaths[1:],
+	}
+	body, _ := json.Marshal(reqBody)
+	req := httptest.NewRequest("POST", "/poweron", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := server.GetApp().Test(req, fiber.TestConfig{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("app.Test() error = %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != fiber.StatusOK {
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		t.Fatalf("Status code = %d, want %d, body: %s", resp.StatusCode, fiber.StatusOK, string(bodyBytes))
+	}
+
+	var result StandardResponse
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
+		t.Fatalf("Failed to decode response: %v", err)
+	}
+
+	if result.Code != CodeSuccess {
+		t.Errorf("Code = %d, want %d", result.Code, CodeSuccess)
+	}
+}
+
 func TestServer_ReloadEngine(t *testing.T) {
 	modelPath, _, _, err := getTestModelPaths()
 	if err != nil {
