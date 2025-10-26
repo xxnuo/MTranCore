@@ -2,6 +2,83 @@
 
 This document provides quick usage examples for the three protocols of MTranCore.
 
+## Server Configuration
+
+### Starting the Server
+
+The worker service can be configured using command line arguments, environment variables, or default values. The priority order is: **Command Line Arguments > Environment Variables > Default Values**.
+
+#### Using Command Line Arguments
+
+```bash
+# Basic usage with custom port
+./worker -port 9000
+
+# Custom host and port
+./worker -host 127.0.0.1 -port 9000
+
+# Set log level
+./worker -log-level debug
+
+# Set working directory
+./worker -work-dir /path/to/models
+
+# Enable gRPC Unix socket
+./worker -grpc-unix-socket /tmp/mtrancore.sock
+
+# Disable specific protocols
+./worker -enable-http false -enable-websocket false
+
+# Enable only gRPC
+./worker -enable-http false -enable-websocket false -enable-grpc true
+```
+
+#### Using Environment Variables
+
+```bash
+# Set environment variables
+export LOG_LEVEL=debug
+export SERVER_HOST=0.0.0.0
+export SERVER_PORT=8988
+export WORK_DIR=./models
+export GRPC_UNIX_SOCKET=/tmp/mtrancore.sock
+export ENABLE_HTTP=true
+export ENABLE_WEBSOCKET=true
+export ENABLE_GRPC=true
+
+# Start the server
+./worker
+```
+
+#### Command Line Arguments Override Environment Variables
+
+```bash
+# Even if SERVER_PORT=8988 is set in environment, this will use port 9000
+export SERVER_PORT=8988
+./worker -port 9000
+```
+
+### Available Configuration Options
+
+| CLI Flag | Environment Variable | Default | Description |
+|----------|---------------------|---------|-------------|
+| `-log-level` | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
+| `-work-dir` | `WORK_DIR` | `./` | Working directory |
+| `-host` | `SERVER_HOST` | `0.0.0.0` | Server host address |
+| `-port` | `SERVER_PORT` | `8988` | Server port |
+| `-grpc-unix-socket` | `GRPC_UNIX_SOCKET` | (empty) | Path to Unix socket file for gRPC |
+| `-enable-http` | `ENABLE_HTTP` | `true` | Enable HTTP server |
+| `-enable-websocket` | `ENABLE_WEBSOCKET` | `true` | Enable WebSocket server |
+| `-enable-grpc` | `ENABLE_GRPC` | `true` | Enable gRPC server |
+
+### Help Information
+
+To see all available command line options:
+
+```bash
+./worker -h
+```
+
 ## HTTP/REST API Examples
 
 ### 1. Health Check
