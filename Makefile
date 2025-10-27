@@ -10,10 +10,6 @@ update-wasm:
 	filehash=$$(cat data/translations-wasm.json | jq -r '.data[0].attachment.hash'); \
 	sha256sum internal/wasm/bergamot-translator-worker.wasm | grep $$filehash || echo "File hash mismatch"
 
-update-models:
-	mkdir -p data
-	curl -L -o data/translations-models.json https://github.com/mozilla-firefox/firefox/raw/refs/heads/main/services/settings/dumps/main/translations-models.json
-
 gen:
 	@go generate ./...
 
