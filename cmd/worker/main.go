@@ -42,12 +42,12 @@ func main() {
 	// Initialize unified logger
 	InitLogger(cfg.LogLevel)
 
-	Info("==============================================")
+	// Info("==============================================")
 	Info("Starting MTranCore Worker Service (Unified)")
 	Info("Log Level: %s", cfg.LogLevel)
 	Info("Work Directory: %s", cfg.WorkDir)
 	Info("Server Address: %s:%s", cfg.ServerHost, cfg.ServerPort)
-	Info("==============================================")
+	// Info("==============================================")
 
 	// Create a TCP listener on the unified port
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
@@ -261,7 +261,7 @@ func main() {
 		}
 	}()
 
-	Info("==============================================")
+	// Info("==============================================")
 	if len(enabledServices) > 0 {
 		Info("Enabled services: %s", strings.Join(enabledServices, ", "))
 		Info("All services running on port %s", cfg.ServerPort)
@@ -269,7 +269,7 @@ func main() {
 		Warn("No services enabled!")
 	}
 	Info("Press Ctrl+C to shutdown gracefully")
-	Info("==============================================")
+	// Info("==============================================")
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
