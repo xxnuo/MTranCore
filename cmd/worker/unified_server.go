@@ -108,7 +108,7 @@ func (s *UnifiedServer) poweron(c fiber.Ctx) error {
 	}
 
 	ctx := context.Background()
-	result := s.engineManager.Poweron(ctx, req.Path)
+	result := s.engineManager.PoweronWithRequest(ctx, req)
 
 	if !result.Success {
 		statusCode := fiber.StatusInternalServerError
