@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"unsafe"
 
 	embind "github.com/jerbob92/wazero-emscripten-embind"
@@ -209,6 +210,12 @@ type TranslationRequest struct {
 
 // Translate translates text provided in the request into a model target language.
 func (t *Translator) Translate(ctx context.Context, request TranslationRequest) (string, error) {
+	// Safety check for long text to avoid WASM crash
+	// Only apply this logic if HTML processing is disabled, as splitting HTML is complex
+	if !request.Options.HTML && len(request.Text) > 200 {
+		return t.translateLongText(ctx, request)
+	}
+
 	translatedTexts, err := t.TranslateMultiple(ctx, request)
 	if err != nil {
 		return "", err
@@ -217,6 +224,77 @@ func (t *Translator) Translate(ctx context.Context, request TranslationRequest) 
 		return "", fmt.Errorf("expected translated texts to have at least 1 element")
 	}
 	return translatedTexts[0], nil
+}
+
+func (t *Translator) translateLongText(ctx context.Context, request TranslationRequest) (string, error) {
+	// Try splitting by common separators to avoid WASM crashes on long texts
+	separators := []string{
+		"\n", " - ", ". ", "。", "！", "!", "？", "?",
+		"; ", "；", "：", ": ", "，", ", ",
+	}
+	var bestSep string
+	var bestParts []string
+	minMaxLen := len(request.Text)
+
+	for _, sep := range separators {
+		parts := strings.Split(request.Text, sep)
+		if len(parts) > 1 {
+			maxLen := 0
+			for _, p := range parts {
+				if len(p) > maxLen {
+					maxLen = len(p)
+				}
+			}
+			// Prefer split that reduces max segment length significantly
+			if maxLen < minMaxLen {
+				minMaxLen = maxLen
+				bestSep = sep
+				bestParts = parts
+			}
+		}
+	}
+
+	// If no effective split found by punctuation, fallback to hard chunking
+	if len(bestParts) <= 1 {
+		// Hard chunk by length (safe fallback for extremely long text without punctuation)
+		// We use a chunk size of 100 runes to be safe
+		bestParts = chunkByLength(request.Text, 100)
+		bestSep = ""
+	}
+
+	// Create requests for parts
+	reqs := make([]TranslationRequest, 0, len(bestParts))
+	for _, p := range bestParts {
+		reqs = append(reqs, TranslationRequest{
+			Text:    p,
+			Options: request.Options,
+		})
+	}
+
+	// Translate parts
+	results, err := t.TranslateMultiple(ctx, reqs...)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.Join(results, bestSep), nil
+}
+
+// chunkByLength splits text into chunks of specified rune length
+func chunkByLength(text string, chunkSize int) []string {
+	if chunkSize <= 0 {
+		return []string{text}
+	}
+	runes := []rune(text)
+	var chunks []string
+	for i := 0; i < len(runes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[i:end]))
+	}
+	return chunks
 }
 
 // TranslateMultiple translates a batch of text provided in the requests into a model target language.
