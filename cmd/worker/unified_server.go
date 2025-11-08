@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -258,8 +259,15 @@ func (s *UnifiedServer) compute(c fiber.Ctx) error {
 	queue := s.engineManager.GetQueue()
 	translatedText, err := queue.Translate(ctx, translationReq)
 	if err != nil {
+		errMsg := err.Error()
+		// Check for fatal WASM errors (module closed, exit_code, etc.)
+		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
+			Error("Fatal WASM error detected, triggering reboot: %v", err)
+			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
+		}
+
 		return c.Status(fiber.StatusInternalServerError).JSON(
-			NewErrorResponse(CodeComputeFailure, "Translation failed: "+err.Error()))
+			NewErrorResponse(CodeComputeFailure, "Translation failed: "+errMsg))
 	}
 
 	// Return plain text on success
@@ -520,10 +528,17 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 	queue := s.engineManager.GetQueue()
 	translatedText, err := queue.Translate(ctx, translationReq)
 	if err != nil {
+		errMsg := err.Error()
+		// Check for fatal WASM errors (module closed, exit_code, etc.)
+		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
+			Error("Fatal WASM error detected (WebSocket), triggering reboot: %v", err)
+			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
+		}
+
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeFailure),
-			Msg:  "Translation failed: " + err.Error(),
+			Msg:  "Translation failed: " + errMsg,
 		}
 	}
 
