@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -43,8 +44,8 @@ type WSResponse struct {
 // NewWebSocketServer creates a new WebSocket server instance
 func NewWebSocketServer(cfg *Config) *WebSocketServer {
 	// Redirect Fiber's log output to our standard logger
-	if globalLogger != nil {
-		fiberLogger := globalLogger.GetWriter(LogLevelInfo)
+	if log := logger.GetLogger(); log != nil {
+		fiberLogger := log.GetWriter(logger.LogLevelInfo)
 		fiberlog.SetOutput(fiberLogger)
 	} else {
 		// Discard Fiber logs if no logger is set
@@ -69,7 +70,7 @@ func NewWebSocketServer(cfg *Config) *WebSocketServer {
 	}
 
 	// Suppress Fiber's server logger output
-	app.Server().Logger = &DiscardLogger{}
+	app.Server().Logger = &logger.DiscardLogger{}
 
 	// WebSocket upgrade middleware
 	app.Use("/ws", func(c fiber.Ctx) error {
@@ -95,14 +96,14 @@ func (s *WebSocketServer) handleWebSocket(c *websocket.Conn) {
 	defer c.Close()
 
 	// Connection established
-	Debug("[WebSocket] New connection from %s", c.RemoteAddr().String())
+	logger.Debug("[WebSocket] New connection from %s", c.RemoteAddr().String())
 
 	for {
 		var msg WSMessage
 		err := c.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				Error("[WebSocket] Error reading message: %v", err)
+				logger.Error("[WebSocket] Error reading message: %v", err)
 			}
 			break
 		}
@@ -130,7 +131,7 @@ func (s *WebSocketServer) handleWebSocket(c *websocket.Conn) {
 
 		// Send response
 		if err := c.WriteJSON(response); err != nil {
-			Error("[WebSocket] Error sending response: %v", err)
+			logger.Error("[WebSocket] Error sending response: %v", err)
 			break
 		}
 
@@ -140,7 +141,7 @@ func (s *WebSocketServer) handleWebSocket(c *websocket.Conn) {
 		}
 	}
 
-	Debug("[WebSocket] Connection closed from %s", c.RemoteAddr().String())
+	logger.Debug("[WebSocket] Connection closed from %s", c.RemoteAddr().String())
 }
 
 // handlePoweron handles poweron message
@@ -211,7 +212,7 @@ func (s *WebSocketServer) handlePoweroff(data json.RawMessage) WSResponse {
 		}
 
 		if err := s.app.Shutdown(); err != nil {
-			Error("Error during shutdown: %v", err)
+			logger.Error("Error during shutdown: %v", err)
 		}
 		close(s.shutdownCh)
 	}()

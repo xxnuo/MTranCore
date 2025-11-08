@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"errors"
 	"fmt"
@@ -46,20 +47,20 @@ func main() {
 	cfg := GetConfig()
 
 	// Initialize unified logger
-	InitLogger(cfg.LogLevel)
+	logger.InitLogger(cfg.LogLevel)
 
-	Debug("[DEBUG-MAIN] Configuration loaded")
-	Info("Starting MTranCore Worker Service (Unified)")
-	Info("Log Level: %s", cfg.LogLevel)
-	Info("Work Directory: %s", cfg.WorkDir)
-	Info("Server Address: %s:%s", cfg.ServerHost, cfg.ServerPort)
-	// Info("==============================================")
+	logger.Debug("[DEBUG-MAIN] Configuration loaded")
+	logger.Info("Starting MTranCore Worker Service (Unified)")
+	logger.Info("Log Level: %s", cfg.LogLevel)
+	logger.Info("Work Directory: %s", cfg.WorkDir)
+	logger.Info("Server Address: %s:%s", cfg.ServerHost, cfg.ServerPort)
+	// logger.Info("==============================================")
 
 	// Create a TCP listener on the unified port
 	addr := fmt.Sprintf("%s:%s", cfg.ServerHost, cfg.ServerPort)
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		Fatal("Failed to listen on %s: %v", addr, err)
+		logger.Fatal("Failed to listen on %s: %v", addr, err)
 	}
 
 	// Create a cmux multiplexer
@@ -136,21 +137,21 @@ func main() {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			Info("[gRPC] Starting server on %s", addr)
-			Debug("[gRPC] Service: TranslatorService")
-			Debug("  - Health")
-			Debug("  - Poweron")
-			Debug("  - Poweroff")
-			Debug("  - Reboot")
-			Debug("  - Ready")
-			Debug("  - Compute")
-			Debug("  - ComputeStream")
+			logger.Info("[gRPC] Starting server on %s", addr)
+			logger.Debug("[gRPC] Service: TranslatorService")
+			logger.Debug("  - Health")
+			logger.Debug("  - Poweron")
+			logger.Debug("  - Poweroff")
+			logger.Debug("  - Reboot")
+			logger.Debug("  - Ready")
+			logger.Debug("  - Compute")
+			logger.Debug("  - ComputeStream")
 
 			if err := grpcServerInstance.Serve(grpcListener); err != nil {
 				if isClosedConnectionError(err) {
-					Debug("[gRPC] Server stopped: %v", err)
+					logger.Debug("[gRPC] Server stopped: %v", err)
 				} else {
-					Error("[gRPC] Server error: %v", err)
+					logger.Error("[gRPC] Server error: %v", err)
 				}
 			}
 		}()
@@ -162,12 +163,12 @@ func main() {
 
 			unixListener, err := net.Listen("unix", cfg.GRPCUnixSocket)
 			if err != nil {
-				Fatal("Failed to listen on Unix socket %s: %v", cfg.GRPCUnixSocket, err)
+				logger.Fatal("Failed to listen on Unix socket %s: %v", cfg.GRPCUnixSocket, err)
 			}
 
 			// Set socket permissions to allow connections
 			if err := os.Chmod(cfg.GRPCUnixSocket, 0666); err != nil {
-				Warn("Failed to set Unix socket permissions: %v", err)
+				logger.Warn("Failed to set Unix socket permissions: %v", err)
 			}
 
 			wg.Add(1)
@@ -176,19 +177,19 @@ func main() {
 				defer unixListener.Close()
 				defer os.Remove(cfg.GRPCUnixSocket)
 
-				Info("[gRPC Unix] Starting server on %s", cfg.GRPCUnixSocket)
-				Debug("[gRPC Unix] Using same service instance as TCP gRPC")
+				logger.Info("[gRPC Unix] Starting server on %s", cfg.GRPCUnixSocket)
+				logger.Debug("[gRPC Unix] Using same service instance as TCP gRPC")
 
 				if err := grpcServerInstance.Serve(unixListener); err != nil {
 					if isClosedConnectionError(err) {
-						Debug("[gRPC Unix] Server stopped: %v", err)
+						logger.Debug("[gRPC Unix] Server stopped: %v", err)
 					} else {
-						Error("[gRPC Unix] Server error: %v", err)
+						logger.Error("[gRPC Unix] Server error: %v", err)
 					}
 				}
 			}()
 
-			Info("[gRPC Unix] Unix socket enabled: %s", cfg.GRPCUnixSocket)
+			logger.Info("[gRPC Unix] Unix socket enabled: %s", cfg.GRPCUnixSocket)
 		}
 	}
 
@@ -198,24 +199,24 @@ func main() {
 		go func() {
 			defer wg.Done()
 			if cfg.EnableHTTP {
-				Info("[HTTP] Starting server on %s", addr)
-				Debug("[HTTP] Available endpoints:")
-				Debug("  GET  /health   - Health check")
-				Debug("  POST /poweron  - Load translation engine")
-				Debug("  POST /poweroff - Shutdown server")
-				Debug("  POST /reboot   - Reload translation engine")
-				Debug("  GET  /ready    - Check engine status")
-				Debug("  POST /compute  - Translate text")
+				logger.Info("[HTTP] Starting server on %s", addr)
+				logger.Debug("[HTTP] Available endpoints:")
+				logger.Debug("  GET  /health   - Health check")
+				logger.Debug("  POST /poweron  - Load translation engine")
+				logger.Debug("  POST /poweroff - Shutdown server")
+				logger.Debug("  POST /reboot   - Reload translation engine")
+				logger.Debug("  GET  /ready    - Check engine status")
+				logger.Debug("  POST /compute  - Translate text")
 			}
 			if cfg.EnableWebSocket {
-				Info("[WebSocket] Starting server on %s", addr)
-				Debug("[WebSocket] Available at /ws")
-				Debug("[WebSocket] Message types:")
-				Debug("  - poweron  - Load translation engine")
-				Debug("  - poweroff - Shutdown server")
-				Debug("  - reboot   - Reload translation engine")
-				Debug("  - ready    - Check engine status")
-				Debug("  - compute  - Translate text")
+				logger.Info("[WebSocket] Starting server on %s", addr)
+				logger.Debug("[WebSocket] Available at /ws")
+				logger.Debug("[WebSocket] Message types:")
+				logger.Debug("  - poweron  - Load translation engine")
+				logger.Debug("  - poweroff - Shutdown server")
+				logger.Debug("  - reboot   - Reload translation engine")
+				logger.Debug("  - ready    - Check engine status")
+				logger.Debug("  - compute  - Translate text")
 			}
 
 			// Use the HTTP listener from cmux
@@ -246,9 +247,9 @@ func main() {
 			// Get any error
 			if err := <-errCh; err != nil {
 				if isClosedConnectionError(err) {
-					Debug("[HTTP/WebSocket] Server stopped: %v", err)
+					logger.Debug("[HTTP/WebSocket] Server stopped: %v", err)
 				} else {
-					Error("[HTTP/WebSocket] Server error: %v", err)
+					logger.Error("[HTTP/WebSocket] Server error: %v", err)
 				}
 			}
 		}()
@@ -260,22 +261,22 @@ func main() {
 		defer wg.Done()
 		if err := m.Serve(); err != nil {
 			if isClosedConnectionError(err) {
-				Debug("[Multiplexer] Stopped: %v", err)
+				logger.Debug("[Multiplexer] Stopped: %v", err)
 			} else {
-				Error("[Multiplexer] Error: %v", err)
+				logger.Error("[Multiplexer] Error: %v", err)
 			}
 		}
 	}()
 
-	// Info("==============================================")
+	// logger.Info("==============================================")
 	if len(enabledServices) > 0 {
-		Info("Enabled services: %s", strings.Join(enabledServices, ", "))
-		Info("All services running on port %s", cfg.ServerPort)
+		logger.Info("Enabled services: %s", strings.Join(enabledServices, ", "))
+		logger.Info("All services running on port %s", cfg.ServerPort)
 	} else {
-		Warn("No services enabled!")
+		logger.Warn("No services enabled!")
 	}
-	Info("Press Ctrl+C to shutdown gracefully")
-	// Info("==============================================")
+	logger.Info("Press Ctrl+C to shutdown gracefully")
+	// logger.Info("==============================================")
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
@@ -293,9 +294,9 @@ func main() {
 	// Wait for either OS signal or service-initiated shutdown
 	select {
 	case <-sigCh:
-		Info("\nReceived shutdown signal, shutting down gracefully...")
+		logger.Info("\nReceived shutdown signal, shutting down gracefully...")
 	case <-mergeShutdownChannels(shutdownChannels):
-		Info("Shutdown initiated by service...")
+		logger.Info("Shutdown initiated by service...")
 	}
 
 	// Shutdown all services
@@ -303,13 +304,13 @@ func main() {
 	defer cancel()
 
 	if unifiedServer != nil {
-		Info("[HTTP/WebSocket] Shutting down...")
+		logger.Info("[HTTP/WebSocket] Shutting down...")
 		unifiedServer.app.ShutdownWithContext(shutdownCtx)
 		unifiedServer.Close()
 	}
 
 	if grpcServerInstance != nil {
-		Info("[gRPC] Shutting down...")
+		logger.Info("[gRPC] Shutting down...")
 		grpcServerInstance.GracefulStop()
 		if grpcService != nil {
 			grpcService.Close()
@@ -320,7 +321,7 @@ func main() {
 	lis.Close()
 
 	wg.Wait()
-	Info("All services stopped. Goodbye!")
+	logger.Info("All services stopped. Goodbye!")
 }
 
 // mergeShutdownChannels merges multiple shutdown channels into one

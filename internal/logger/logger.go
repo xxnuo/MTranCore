@@ -1,4 +1,4 @@
-package main
+package logger
 
 import (
 	"fmt"
@@ -26,6 +26,14 @@ type Logger struct {
 }
 
 var globalLogger *Logger
+
+func init() {
+    // Initialize with a default logger to avoid nil panics before InitLogger is called
+    globalLogger = &Logger{
+        level:  LogLevelInfo,
+        logger: log.New(os.Stdout, "", 0),
+    }
+}
 
 // InitLogger initializes the global logger with specified level
 func InitLogger(levelStr string) {

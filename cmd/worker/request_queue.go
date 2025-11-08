@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"sync"
 
@@ -44,16 +45,16 @@ func NewTranslationQueue() *TranslationQueue {
 
 // SetTranslator updates the translator instance
 func (q *TranslationQueue) SetTranslator(translator *engine.Translator) {
-	Debug("[DEBUG-QUEUE] SetTranslator: setting translator=%v", translator)
+	logger.Debug("[DEBUG-QUEUE] SetTranslator: setting translator=%v", translator)
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.translator = translator
-	Debug("[DEBUG-QUEUE] SetTranslator: q.translator now=%v", q.translator)
+	logger.Debug("[DEBUG-QUEUE] SetTranslator: q.translator now=%v", q.translator)
 }
 
 // Translate submits a translation request and waits for the result
 func (q *TranslationQueue) Translate(ctx context.Context, req engine.TranslationRequest) (string, error) {
-	Debug("[DEBUG-QUEUE] Translate: starting, text length=%d", len(req.Text))
+	logger.Debug("[DEBUG-QUEUE] Translate: starting, text length=%d", len(req.Text))
 	respChan := make(chan translationResponse, 1)
 
 	translationReq := &translationRequest{
@@ -64,25 +65,25 @@ func (q *TranslationQueue) Translate(ctx context.Context, req engine.Translation
 
 	select {
 	case <-q.stopChan:
-		Debug("[DEBUG-QUEUE] Translate: queue closed")
+		logger.Debug("[DEBUG-QUEUE] Translate: queue closed")
 		return "", ErrQueueClosed
 	case <-ctx.Done():
-		Debug("[DEBUG-QUEUE] Translate: context done")
+		logger.Debug("[DEBUG-QUEUE] Translate: context done")
 		return "", ctx.Err()
 	case q.reqChan <- translationReq:
-		Debug("[DEBUG-QUEUE] Translate: request submitted to queue")
+		logger.Debug("[DEBUG-QUEUE] Translate: request submitted to queue")
 	}
 
 	// Wait for response
 	select {
 	case <-q.stopChan:
-		Debug("[DEBUG-QUEUE] Translate: queue closed while waiting")
+		logger.Debug("[DEBUG-QUEUE] Translate: queue closed while waiting")
 		return "", ErrQueueClosed
 	case <-ctx.Done():
-		Debug("[DEBUG-QUEUE] Translate: context done while waiting")
+		logger.Debug("[DEBUG-QUEUE] Translate: context done while waiting")
 		return "", ctx.Err()
 	case resp := <-respChan:
-		Debug("[DEBUG-QUEUE] Translate: got response, err=%v", resp.err)
+		logger.Debug("[DEBUG-QUEUE] Translate: got response, err=%v", resp.err)
 		return resp.result, resp.err
 	}
 }
@@ -103,21 +104,21 @@ func (q *TranslationQueue) worker() {
 
 // processRequest handles a single translation request
 func (q *TranslationQueue) processRequest(req *translationRequest) {
-	Debug("[DEBUG-QUEUE] processRequest: starting")
+	logger.Debug("[DEBUG-QUEUE] processRequest: starting")
 	q.mu.RLock()
 	translator := q.translator
 	q.mu.RUnlock()
-	Debug("[DEBUG-QUEUE] processRequest: translator=%v", translator)
+	logger.Debug("[DEBUG-QUEUE] processRequest: translator=%v", translator)
 
 	var resp translationResponse
 
 	if translator == nil {
-		Debug("[DEBUG-QUEUE] processRequest: translator is nil")
+		logger.Debug("[DEBUG-QUEUE] processRequest: translator is nil")
 		resp.err = ErrTranslatorNotReady
 	} else {
-		Debug("[DEBUG-QUEUE] processRequest: calling translator.Translate")
+		logger.Debug("[DEBUG-QUEUE] processRequest: calling translator.Translate")
 		resp.result, resp.err = translator.Translate(req.ctx, req.req)
-		Debug("[DEBUG-QUEUE] processRequest: translator.Translate returned, err=%v", resp.err)
+		logger.Debug("[DEBUG-QUEUE] processRequest: translator.Translate returned, err=%v", resp.err)
 	}
 
 	// Send response

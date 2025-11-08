@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"os"
 	"path/filepath"
@@ -77,13 +78,13 @@ func (em *EngineManager) resolveFilePath(path string) string {
 
 // PoweronWithRequest loads the translation engine with the PoweronRequest
 func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequest) PoweronResult {
-	Debug("[DEBUG-ENGINE] PoweronWithRequest: starting, req=%+v", req)
+	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: starting, req=%+v", req)
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
 	// Check if engine is already loaded
 	if em.translator != nil {
-		Debug("[DEBUG-ENGINE] PoweronWithRequest: engine already loaded")
+		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: engine already loaded")
 		return PoweronResult{
 			Success:       true,
 			ErrorCode:     CodeSuccess,
@@ -157,10 +158,10 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 	}
 
 	// Create translator
-	Debug("[DEBUG-ENGINE] PoweronWithRequest: calling engine.CreateTranslator")
+	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: calling engine.CreateTranslator")
 	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
 	if err != nil {
-		Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator failed: %v", err)
+		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator failed: %v", err)
 		errMsg := err.Error()
 		if containsAny(errMsg, "not found", "missing") {
 			return PoweronResult{
@@ -175,25 +176,25 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 			ErrorMessage: err.Error(),
 		}
 	}
-	Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator succeeded, translator=%v", translator)
+	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator succeeded, translator=%v", translator)
 
 	em.translator = translator
 	em.loadedFiles = loadedFiles
-	Debug("[DEBUG-ENGINE] PoweronWithRequest: em.translator set to %v", em.translator)
+	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: em.translator set to %v", em.translator)
 
 	// Save the poweron request for potential auto-reload after reboot
 	em.lastPoweronRequest = &req
 
 	// Update the queue's translator
 	if em.queue != nil {
-		Debug("[DEBUG-ENGINE] PoweronWithRequest: calling queue.SetTranslator")
+		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: calling queue.SetTranslator")
 		em.queue.SetTranslator(translator)
-		Debug("[DEBUG-ENGINE] PoweronWithRequest: queue.SetTranslator done")
+		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: queue.SetTranslator done")
 	} else {
-		Debug("[DEBUG-ENGINE] PoweronWithRequest: queue is nil!")
+		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: queue is nil!")
 	}
 
-	Debug("[DEBUG-ENGINE] PoweronWithRequest: success")
+	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: success")
 	return PoweronResult{
 		Success:   true,
 		ErrorCode: CodeSuccess,
@@ -247,7 +248,7 @@ reboot:
 
 	// Auto-reload engine if we have a saved poweron request
 	if lastReq != nil {
-		Info("Auto-reloading engine after reboot...")
+		logger.Info("Auto-reloading engine after reboot...")
 		result := em.PoweronWithRequest(ctx, *lastReq)
 		if !result.Success {
 			return RebootResult{
@@ -256,7 +257,7 @@ reboot:
 				ErrorMessage: "Failed to reload engine after reboot: " + result.ErrorMessage,
 			}
 		}
-		Info("Engine auto-reloaded successfully after reboot")
+		logger.Info("Engine auto-reloaded successfully after reboot")
 	}
 
 	return RebootResult{
@@ -282,7 +283,7 @@ func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter 
 			for {
 				select {
 				case <-timeout:
-					Warn("Reboot timeout reached, forcing reboot")
+					logger.Warn("Reboot timeout reached, forcing reboot")
 					goto reboot
 				case <-ticker.C:
 					if activeCounter == nil || atomic.LoadInt32(activeCounter) == 0 {
@@ -300,7 +301,7 @@ func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter 
 
 		// Close existing translator and loaded files
 		if err := em.unloadEngineLocked(); err != nil {
-			Error("Failed to close translator during reboot: %v", err)
+			logger.Error("Failed to close translator during reboot: %v", err)
 			em.mu.Unlock()
 			if onComplete != nil {
 				onComplete(RebootResult{
@@ -316,11 +317,11 @@ func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter 
 
 		// Auto-reload engine if we have a saved poweron request
 		if lastReq != nil {
-			Info("Auto-reloading engine after reboot...")
+			logger.Info("Auto-reloading engine after reboot...")
 			ctx := context.Background()
 			result := em.PoweronWithRequest(ctx, *lastReq)
 			if !result.Success {
-				Error("Failed to reload engine after reboot: %s", result.ErrorMessage)
+				logger.Error("Failed to reload engine after reboot: %s", result.ErrorMessage)
 				if onComplete != nil {
 					onComplete(RebootResult{
 						Success:      false,
@@ -330,7 +331,7 @@ func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter 
 				}
 				return
 			}
-			Info("Engine auto-reloaded successfully after reboot")
+			logger.Info("Engine auto-reloaded successfully after reboot")
 		}
 
 		if onComplete != nil {
@@ -365,7 +366,7 @@ func (em *EngineManager) WaitForIdle(activeCounter *int32, timeoutDuration time.
 func (em *EngineManager) unloadEngineLocked() error {
 	if em.translator != nil {
 		if err := em.translator.Close(context.Background()); err != nil {
-			Warn("Failed to close translator: %v", err)
+			logger.Warn("Failed to close translator: %v", err)
 			return err
 		}
 		em.translator = nil
@@ -420,7 +421,7 @@ func (em *EngineManager) IsReady() bool {
 
 // GetQueue returns the translation queue
 func (em *EngineManager) GetQueue() *TranslationQueue {
-	Debug("[DEBUG-ENGINE] GetQueue: returning queue=%v, queue.translator=%v", em.queue, func() interface{} {
+	logger.Debug("[DEBUG-ENGINE] GetQueue: returning queue=%v, queue.translator=%v", em.queue, func() interface{} {
 		if em.queue == nil {
 			return nil
 		}

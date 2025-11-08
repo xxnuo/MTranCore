@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	engine "github.com/xxnuo/MTranCore/engine"
+	"github.com/xxnuo/MTranCore/internal/logger"
 )
 
 var (
@@ -22,6 +23,7 @@ var (
 	html      = flag.Bool("html", false, "Treat input as HTML")
 	cacheSize = flag.Uint("cache", 1024, "Cache size for translation")
 	repl      = flag.Bool("r", false, "Run in REPL (interactive) mode")
+	logLevel  = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
 )
 
 func main() {
@@ -43,6 +45,8 @@ func main() {
 	}
 
 	flag.Parse()
+
+	logger.InitLogger(*logLevel)
 
 	// Validate required parameters
 	if !*repl && *text == "" {

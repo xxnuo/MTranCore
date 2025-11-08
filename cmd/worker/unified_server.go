@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -36,8 +37,8 @@ type UnifiedServer struct {
 // NewUnifiedServer creates a new unified server instance
 func NewUnifiedServer(cfg *Config) *UnifiedServer {
 	// Redirect Fiber's log output to our standard logger
-	if globalLogger != nil {
-		fiberLogger := globalLogger.GetWriter(LogLevelInfo)
+	if log := logger.GetLogger(); log != nil {
+		fiberLogger := log.GetWriter(logger.LogLevelInfo)
 		fiberlog.SetOutput(fiberLogger)
 	} else {
 		// Discard Fiber logs if no logger is set
@@ -62,7 +63,7 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 	}
 
 	// Suppress Fiber's server logger output
-	app.Server().Logger = &DiscardLogger{}
+	app.Server().Logger = &logger.DiscardLogger{}
 
 	// HTTP Routes (if enabled)
 	if cfg.EnableHTTP {
@@ -163,7 +164,7 @@ func (s *UnifiedServer) poweroff(c fiber.Ctx) error {
 		}
 
 		if err := s.app.Shutdown(); err != nil {
-			Error("Error during shutdown: %v", err)
+			logger.Error("Error during shutdown: %v", err)
 		}
 		close(s.shutdownCh)
 	}()
@@ -262,7 +263,7 @@ func (s *UnifiedServer) compute(c fiber.Ctx) error {
 		errMsg := err.Error()
 		// Check for fatal WASM errors (module closed, exit_code, etc.)
 		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
-			Error("Fatal WASM error detected, triggering reboot: %v", err)
+			logger.Error("Fatal WASM error detected, triggering reboot: %v", err)
 			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
 		}
 
@@ -281,14 +282,14 @@ func (s *UnifiedServer) compute(c fiber.Ctx) error {
 func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
 	defer c.Close()
 
-	Debug("[WebSocket] New connection from %s", c.RemoteAddr().String())
+	logger.Debug("[WebSocket] New connection from %s", c.RemoteAddr().String())
 
 	for {
 		var msg WSMessage
 		err := c.ReadJSON(&msg)
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				Error("[WebSocket] Error reading message: %v", err)
+				logger.Error("[WebSocket] Error reading message: %v", err)
 			}
 			break
 		}
@@ -314,7 +315,7 @@ func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
 		}
 
 		if err := c.WriteJSON(response); err != nil {
-			Error("[WebSocket] Error sending response: %v", err)
+			logger.Error("[WebSocket] Error sending response: %v", err)
 			break
 		}
 
@@ -323,7 +324,7 @@ func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
 		}
 	}
 
-	Debug("[WebSocket] Connection closed from %s", c.RemoteAddr().String())
+	logger.Debug("[WebSocket] Connection closed from %s", c.RemoteAddr().String())
 }
 
 // handleWSPoweron handles poweron message
@@ -394,7 +395,7 @@ func (s *UnifiedServer) handleWSPoweroff(data json.RawMessage) WSResponse {
 		}
 
 		if err := s.app.Shutdown(); err != nil {
-			Error("Error during shutdown: %v", err)
+			logger.Error("Error during shutdown: %v", err)
 		}
 		close(s.shutdownCh)
 	}()
@@ -481,12 +482,12 @@ func (s *UnifiedServer) handleWSReady() WSResponse {
 
 // handleWSCompute handles compute message
 func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
-	Debug("[DEBUG-WS] handleWSCompute: starting")
+	logger.Debug("[DEBUG-WS] handleWSCompute: starting")
 	atomic.AddInt32(&s.activeReqs, 1)
 	defer atomic.AddInt32(&s.activeReqs, -1)
 
 	if s.isShuttingDown.Load() {
-		Debug("[DEBUG-WS] handleWSCompute: server is shutting down")
+		logger.Debug("[DEBUG-WS] handleWSCompute: server is shutting down")
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInternalError),
@@ -496,17 +497,17 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 
 	var req ComputeRequest
 	if err := json.Unmarshal(data, &req); err != nil {
-		Debug("[DEBUG-WS] handleWSCompute: invalid JSON: %v", err)
+		logger.Debug("[DEBUG-WS] handleWSCompute: invalid JSON: %v", err)
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
 			Msg:  "Invalid JSON: " + err.Error(),
 		}
 	}
-	Debug("[DEBUG-WS] handleWSCompute: req.Text length=%d, req.HTML=%v", len(req.Text), req.HTML)
+	logger.Debug("[DEBUG-WS] handleWSCompute: req.Text length=%d, req.HTML=%v", len(req.Text), req.HTML)
 
 	if req.Text == "" {
-		Debug("[DEBUG-WS] handleWSCompute: text is empty")
+		logger.Debug("[DEBUG-WS] handleWSCompute: text is empty")
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
@@ -515,7 +516,7 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 	}
 
 	isReady := s.engineManager.IsReady()
-	Debug("[DEBUG-WS] handleWSCompute: engineManager.IsReady()=%v", isReady)
+	logger.Debug("[DEBUG-WS] handleWSCompute: engineManager.IsReady()=%v", isReady)
 	if !isReady {
 		return WSResponse{
 			Type: "compute",
@@ -532,16 +533,16 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 	}
 
 	ctx := context.Background()
-	Debug("[DEBUG-WS] handleWSCompute: getting queue")
+	logger.Debug("[DEBUG-WS] handleWSCompute: getting queue")
 	queue := s.engineManager.GetQueue()
-	Debug("[DEBUG-WS] handleWSCompute: queue=%v, calling Translate", queue)
+	logger.Debug("[DEBUG-WS] handleWSCompute: queue=%v, calling Translate", queue)
 	translatedText, err := queue.Translate(ctx, translationReq)
-	Debug("[DEBUG-WS] handleWSCompute: Translate returned, err=%v", err)
+	logger.Debug("[DEBUG-WS] handleWSCompute: Translate returned, err=%v", err)
 	if err != nil {
 		errMsg := err.Error()
 		// Check for fatal WASM errors (module closed, exit_code, etc.)
 		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
-			Error("Fatal WASM error detected (WebSocket), triggering reboot: %v", err)
+			logger.Error("Fatal WASM error detected (WebSocket), triggering reboot: %v", err)
 			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
 		}
 

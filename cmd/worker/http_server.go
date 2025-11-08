@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"fmt"
 	"io"
@@ -69,8 +70,8 @@ type ReadyResponse struct {
 // NewServer creates a new HTTP server instance
 func NewServer(cfg *Config) *Server {
 	// Redirect Fiber's log output to our standard logger
-	if globalLogger != nil {
-		fiberLogger := globalLogger.GetWriter(LogLevelInfo)
+	if log := logger.GetLogger(); log != nil {
+		fiberLogger := log.GetWriter(logger.LogLevelInfo)
 		fiberlog.SetOutput(fiberLogger)
 	} else {
 		// Discard Fiber logs if no logger is set
@@ -95,7 +96,7 @@ func NewServer(cfg *Config) *Server {
 	}
 
 	// Suppress Fiber's server logger output
-	app.Server().Logger = &DiscardLogger{}
+	app.Server().Logger = &logger.DiscardLogger{}
 
 	// Routes
 	app.Get("/health", server.health)
@@ -176,7 +177,7 @@ func (s *Server) poweroff(c fiber.Ctx) error {
 		}
 
 		if err := s.app.Shutdown(); err != nil {
-			Error("Error during shutdown: %v", err)
+			logger.Error("Error during shutdown: %v", err)
 		}
 		close(s.shutdownCh)
 	}()
