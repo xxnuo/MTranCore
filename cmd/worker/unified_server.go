@@ -481,10 +481,12 @@ func (s *UnifiedServer) handleWSReady() WSResponse {
 
 // handleWSCompute handles compute message
 func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
+	Debug("[DEBUG-WS] handleWSCompute: starting")
 	atomic.AddInt32(&s.activeReqs, 1)
 	defer atomic.AddInt32(&s.activeReqs, -1)
 
 	if s.isShuttingDown.Load() {
+		Debug("[DEBUG-WS] handleWSCompute: server is shutting down")
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInternalError),
@@ -494,14 +496,17 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 
 	var req ComputeRequest
 	if err := json.Unmarshal(data, &req); err != nil {
+		Debug("[DEBUG-WS] handleWSCompute: invalid JSON: %v", err)
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
 			Msg:  "Invalid JSON: " + err.Error(),
 		}
 	}
+	Debug("[DEBUG-WS] handleWSCompute: req.Text length=%d, req.HTML=%v", len(req.Text), req.HTML)
 
 	if req.Text == "" {
+		Debug("[DEBUG-WS] handleWSCompute: text is empty")
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
@@ -509,7 +514,9 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 		}
 	}
 
-	if !s.engineManager.IsReady() {
+	isReady := s.engineManager.IsReady()
+	Debug("[DEBUG-WS] handleWSCompute: engineManager.IsReady()=%v", isReady)
+	if !isReady {
 		return WSResponse{
 			Type: "compute",
 			Code: int(CodeComputeInvalidParams),
@@ -525,8 +532,11 @@ func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
 	}
 
 	ctx := context.Background()
+	Debug("[DEBUG-WS] handleWSCompute: getting queue")
 	queue := s.engineManager.GetQueue()
+	Debug("[DEBUG-WS] handleWSCompute: queue=%v, calling Translate", queue)
 	translatedText, err := queue.Translate(ctx, translationReq)
+	Debug("[DEBUG-WS] handleWSCompute: Translate returned, err=%v", err)
 	if err != nil {
 		errMsg := err.Error()
 		// Check for fatal WASM errors (module closed, exit_code, etc.)

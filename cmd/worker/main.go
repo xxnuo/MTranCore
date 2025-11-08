@@ -36,13 +36,19 @@ func isClosedConnectionError(err error) bool {
 }
 
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Fprintf(os.Stderr, "[PANIC] main: %v\n", r)
+		}
+	}()
+
 	// Load configuration
 	cfg := GetConfig()
 
 	// Initialize unified logger
 	InitLogger(cfg.LogLevel)
 
-	// Info("==============================================")
+	Debug("[DEBUG-MAIN] Configuration loaded")
 	Info("Starting MTranCore Worker Service (Unified)")
 	Info("Log Level: %s", cfg.LogLevel)
 	Info("Work Directory: %s", cfg.WorkDir)

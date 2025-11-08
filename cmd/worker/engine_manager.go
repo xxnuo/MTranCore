@@ -77,11 +77,13 @@ func (em *EngineManager) resolveFilePath(path string) string {
 
 // PoweronWithRequest loads the translation engine with the PoweronRequest
 func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequest) PoweronResult {
+	Debug("[DEBUG-ENGINE] PoweronWithRequest: starting, req=%+v", req)
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
 	// Check if engine is already loaded
 	if em.translator != nil {
+		Debug("[DEBUG-ENGINE] PoweronWithRequest: engine already loaded")
 		return PoweronResult{
 			Success:       true,
 			ErrorCode:     CodeSuccess,
@@ -155,9 +157,10 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 	}
 
 	// Create translator
+	Debug("[DEBUG-ENGINE] PoweronWithRequest: calling engine.CreateTranslator")
 	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)
 	if err != nil {
-		// Determine error code based on error message
+		Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator failed: %v", err)
 		errMsg := err.Error()
 		if containsAny(errMsg, "not found", "missing") {
 			return PoweronResult{
@@ -172,18 +175,25 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 			ErrorMessage: err.Error(),
 		}
 	}
+	Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator succeeded, translator=%v", translator)
 
 	em.translator = translator
 	em.loadedFiles = loadedFiles
+	Debug("[DEBUG-ENGINE] PoweronWithRequest: em.translator set to %v", em.translator)
 
 	// Save the poweron request for potential auto-reload after reboot
 	em.lastPoweronRequest = &req
 
 	// Update the queue's translator
 	if em.queue != nil {
+		Debug("[DEBUG-ENGINE] PoweronWithRequest: calling queue.SetTranslator")
 		em.queue.SetTranslator(translator)
+		Debug("[DEBUG-ENGINE] PoweronWithRequest: queue.SetTranslator done")
+	} else {
+		Debug("[DEBUG-ENGINE] PoweronWithRequest: queue is nil!")
 	}
 
+	Debug("[DEBUG-ENGINE] PoweronWithRequest: success")
 	return PoweronResult{
 		Success:   true,
 		ErrorCode: CodeSuccess,
@@ -410,6 +420,14 @@ func (em *EngineManager) IsReady() bool {
 
 // GetQueue returns the translation queue
 func (em *EngineManager) GetQueue() *TranslationQueue {
+	Debug("[DEBUG-ENGINE] GetQueue: returning queue=%v, queue.translator=%v", em.queue, func() interface{} {
+		if em.queue == nil {
+			return nil
+		}
+		em.queue.mu.RLock()
+		defer em.queue.mu.RUnlock()
+		return em.queue.translator
+	}())
 	return em.queue
 }
 
