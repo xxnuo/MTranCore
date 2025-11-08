@@ -19,6 +19,8 @@ type EngineManager struct {
 	mu          sync.RWMutex
 	config      *Config
 	closeOnce   sync.Once
+	// lastPoweronRequest stores the last successful poweron request for auto-reload after reboot
+	lastPoweronRequest *PoweronRequest
 }
 
 // PoweronResult represents the result of a poweron operation
@@ -174,6 +176,9 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 	em.translator = translator
 	em.loadedFiles = loadedFiles
 
+	// Save the poweron request for potential auto-reload after reboot
+	em.lastPoweronRequest = &req
+
 	// Update the queue's translator
 	if em.queue != nil {
 		em.queue.SetTranslator(translator)
@@ -218,6 +223,9 @@ reboot:
 	em.mu.Lock()
 	defer em.mu.Unlock()
 
+	// Save the last poweron request before unloading
+	lastReq := em.lastPoweronRequest
+
 	// Close existing translator and loaded files
 	if err := em.unloadEngineLocked(); err != nil {
 		return RebootResult{
@@ -225,6 +233,20 @@ reboot:
 			ErrorCode:    CodeRebootInternalError,
 			ErrorMessage: "Failed to close translator: " + err.Error(),
 		}
+	}
+
+	// Auto-reload engine if we have a saved poweron request
+	if lastReq != nil {
+		Info("Auto-reloading engine after reboot...")
+		result := em.PoweronWithRequest(ctx, *lastReq)
+		if !result.Success {
+			return RebootResult{
+				Success:      false,
+				ErrorCode:    CodeRebootInternalError,
+				ErrorMessage: "Failed to reload engine after reboot: " + result.ErrorMessage,
+			}
+		}
+		Info("Engine auto-reloaded successfully after reboot")
 	}
 
 	return RebootResult{
@@ -262,11 +284,43 @@ func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter 
 
 	reboot:
 		em.mu.Lock()
-		defer em.mu.Unlock()
+		
+		// Save the last poweron request before unloading
+		lastReq := em.lastPoweronRequest
 
 		// Close existing translator and loaded files
 		if err := em.unloadEngineLocked(); err != nil {
 			Error("Failed to close translator during reboot: %v", err)
+			em.mu.Unlock()
+			if onComplete != nil {
+				onComplete(RebootResult{
+					Success:      false,
+					ErrorCode:    CodeRebootInternalError,
+					ErrorMessage: "Failed to close translator: " + err.Error(),
+				})
+			}
+			return
+		}
+
+		em.mu.Unlock()
+
+		// Auto-reload engine if we have a saved poweron request
+		if lastReq != nil {
+			Info("Auto-reloading engine after reboot...")
+			ctx := context.Background()
+			result := em.PoweronWithRequest(ctx, *lastReq)
+			if !result.Success {
+				Error("Failed to reload engine after reboot: %s", result.ErrorMessage)
+				if onComplete != nil {
+					onComplete(RebootResult{
+						Success:      false,
+						ErrorCode:    CodeRebootInternalError,
+						ErrorMessage: "Failed to reload engine after reboot: " + result.ErrorMessage,
+					})
+				}
+				return
+			}
+			Info("Engine auto-reloaded successfully after reboot")
 		}
 
 		if onComplete != nil {
@@ -297,6 +351,7 @@ func (em *EngineManager) WaitForIdle(activeCounter *int32, timeoutDuration time.
 }
 
 // unloadEngineLocked closes the translator and loaded files (must hold lock)
+// Note: This does NOT clear lastPoweronRequest, so it can be used for auto-reload
 func (em *EngineManager) unloadEngineLocked() error {
 	if em.translator != nil {
 		if err := em.translator.Close(context.Background()); err != nil {
