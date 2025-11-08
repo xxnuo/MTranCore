@@ -139,24 +139,27 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 			resolvedVocabPaths[i] = em.resolveFilePath(vp)
 		}
 
-		config = engine.EngineConfig{
-			ModelPath:            modelPath,
-			LexicalShortlistPath: shortlistPath,
-			VocabularyPaths:      resolvedVocabPaths,
-		}
-	} else {
-		// Use path (model directory)
-		fullPath, errCode, errMsg := em.ResolvePath(req.Path)
-		if errCode != CodeSuccess {
-			return PoweronResult{
-				Success:      false,
-				ErrorCode:    errCode,
-				ErrorMessage: errMsg,
-			}
-		}
-		config = engine.EngineConfig{ModelDir: fullPath}
-	}
-
+					config = engine.EngineConfig{
+						ModelPath:            modelPath,
+						LexicalShortlistPath: shortlistPath,
+						VocabularyPaths:      resolvedVocabPaths,
+						MaxLengthBreak:       em.config.MaxLengthBreak,
+					}
+				} else {
+					// Use path (model directory)
+					fullPath, errCode, errMsg := em.ResolvePath(req.Path)
+					if errCode != CodeSuccess {
+						return PoweronResult{
+							Success:      false,
+							ErrorCode:    errCode,
+							ErrorMessage: errMsg,
+						}
+					}
+					config = engine.EngineConfig{
+						ModelDir:       fullPath,
+						MaxLengthBreak: em.config.MaxLengthBreak,
+					}
+				}
 	// Create translator
 	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: calling engine.CreateTranslator")
 	translator, loadedFiles, err := engine.CreateTranslator(ctx, config)

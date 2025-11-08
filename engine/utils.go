@@ -24,6 +24,10 @@ type EngineConfig struct {
 
 	// Cache size for translation
 	CacheSize uint `json:"cache_size,omitempty"`
+
+	// MaxLengthBreak defines the maximum text length (in characters) before auto-splitting
+	// Default is 200 if not set.
+	MaxLengthBreak int `json:"max_length_break,omitempty"`
 }
 
 // LoadedFiles tracks opened files for cleanup
@@ -126,6 +130,7 @@ func CreateTranslator(ctx context.Context, cfg EngineConfig) (*Translator, *Load
 		},
 		CacheSize:       cacheSize,
 		BergamotOptions: DefaultBergamotOptions(),
+		MaxLengthBreak:  cfg.MaxLengthBreak,
 	}
 
 	// Create translator

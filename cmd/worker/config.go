@@ -22,6 +22,8 @@ type Config struct {
 	EnableHTTP      bool
 	EnableWebSocket bool
 	EnableGRPC      bool
+
+	MaxLengthBreak int
 }
 
 // GetConfig loads configuration with priority: CLI flags > environment variables > defaults
@@ -35,6 +37,7 @@ func GetConfig() *Config {
 	enableHTTP := flag.String("enable-http", "", "Enable HTTP server (true/false)")
 	enableWebSocket := flag.String("enable-websocket", "", "Enable WebSocket server (true/false)")
 	enableGRPC := flag.String("enable-grpc", "", "Enable gRPC server (true/false)")
+	maxLengthBreak := flag.Int("max-length-break", 0, "Max text length before auto-splitting (default 200)")
 
 	flag.Parse()
 
@@ -54,6 +57,19 @@ func GetConfig() *Config {
 		return parseBool(getEnvOrDefault(envKey, defaultValue))
 	}
 
+	// Helper function to get int value with priority
+	getIntConfigValue := func(flagValue int, envKey string, defaultValue int) int {
+		if flagValue != 0 {
+			return flagValue
+		}
+		if envVal := os.Getenv(envKey); envVal != "" {
+			if v, err := strconv.Atoi(envVal); err == nil {
+				return v
+			}
+		}
+		return defaultValue
+	}
+
 	return &Config{
 		LogLevel: getConfigValue(*logLevel, "LOG_LEVEL", "info"),
 		WorkDir:  getConfigValue(*workDir, "WORK_DIR", "./"),
@@ -68,6 +84,8 @@ func GetConfig() *Config {
 		EnableHTTP:      getBoolConfigValue(*enableHTTP, "ENABLE_HTTP", "true"),
 		EnableWebSocket: getBoolConfigValue(*enableWebSocket, "ENABLE_WEBSOCKET", "true"),
 		EnableGRPC:      getBoolConfigValue(*enableGRPC, "ENABLE_GRPC", "true"),
+
+		MaxLengthBreak: getIntConfigValue(*maxLengthBreak, "MAX_LENGTH_BREAK", 200),
 	}
 }
 

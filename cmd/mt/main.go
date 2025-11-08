@@ -21,9 +21,10 @@ var (
 	vocabTrg  = flag.String("vocab-trg", "", "Target vocabulary file path (.spm)")
 	text      = flag.String("text", "", "Text to translate (required in non-REPL mode)")
 	html      = flag.Bool("html", false, "Treat input as HTML")
-	cacheSize = flag.Uint("cache", 1024, "Cache size for translation")
-	repl      = flag.Bool("r", false, "Run in REPL (interactive) mode")
-	logLevel  = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	cacheSize      = flag.Uint("cache", 1024, "Cache size for translation")
+	repl           = flag.Bool("r", false, "Run in REPL (interactive) mode")
+	logLevel       = flag.String("log-level", "info", "Log level (debug, info, warn, error)")
+	maxLengthBreak = flag.Int("max-length-break", 200, "Max text length before auto-splitting")
 )
 
 func main() {
@@ -97,7 +98,8 @@ func main() {
 func createTranslator(ctx context.Context) (*engine.Translator, func(), error) {
 	// Build engine config
 	engineCfg := engine.EngineConfig{
-		CacheSize: *cacheSize,
+		CacheSize:      *cacheSize,
+		MaxLengthBreak: *maxLengthBreak,
 	}
 
 	if *modelDir != "" {

@@ -59,6 +59,9 @@ type Config struct {
 	// WASMUseContext defines if WASM functions execution must be canceled upon context.Context cancellation.
 	// Equivalent to wazero.RuntimeConfig WithCloseOnContextDone method parameter.
 	WASMUseContext bool
+
+	// MaxLengthBreak defines the maximum text length (in characters) before auto-splitting
+	MaxLengthBreak int
 }
 
 var (
@@ -109,6 +112,8 @@ type Translator struct {
 	svc   *gen.ClassBlockingService
 
 	module api.Module
+
+	maxLengthBreak int
 }
 
 // New compiles Bergamot module and creates TranslationModel and BlockingService instances
@@ -123,8 +128,13 @@ func New(ctx context.Context, cfg Config) (*Translator, error) {
 	}
 
 	tr := &Translator{
-		embindEngine: embind.CreateEngine(embind.NewConfig()),
-		cfg:          cfg,
+		embindEngine:   embind.CreateEngine(embind.NewConfig()),
+		cfg:            cfg,
+		maxLengthBreak: cfg.MaxLengthBreak,
+	}
+
+	if tr.maxLengthBreak <= 0 {
+		tr.maxLengthBreak = 200 // Default safe threshold
 	}
 
 	wasmRuntimeConfig := wazero.NewRuntimeConfig().
@@ -212,7 +222,7 @@ type TranslationRequest struct {
 func (t *Translator) Translate(ctx context.Context, request TranslationRequest) (string, error) {
 	// Safety check for long text to avoid WASM crash
 	// Only apply this logic if HTML processing is disabled, as splitting HTML is complex
-	if !request.Options.HTML && len(request.Text) > 200 {
+	if !request.Options.HTML && len(request.Text) > t.maxLengthBreak {
 		return t.translateLongText(ctx, request)
 	}
 
@@ -251,14 +261,20 @@ func (t *Translator) translateLongText(ctx context.Context, request TranslationR
 				bestSep = sep
 				bestParts = parts
 			}
+
+			// If we found a split that results in chunks smaller than the limit, we're good
+			if maxLen <= t.maxLengthBreak {
+				bestSep = sep
+				bestParts = parts
+				break
+			}
 		}
 	}
 
 	// If no effective split found by punctuation, fallback to hard chunking
 	if len(bestParts) <= 1 {
 		// Hard chunk by length (safe fallback for extremely long text without punctuation)
-		// We use a chunk size of 100 runes to be safe
-		bestParts = chunkByLength(request.Text, 100)
+		bestParts = chunkByLength(request.Text, t.maxLengthBreak)
 		bestSep = ""
 	}
 
