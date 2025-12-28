@@ -3,6 +3,7 @@ module github.com/xxnuo/MTranCore
 go 1.25.0
 
 require (
+	github.com/Andrew-M-C/go.emoji v1.1.4
 	github.com/fasthttp/websocket v1.5.12
 	github.com/gofiber/fiber/v3 v3.0.0-rc.2
 	github.com/jerbob92/wazero-emscripten-embind v1.5.2
