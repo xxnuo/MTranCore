@@ -19,7 +19,7 @@ func processTextWithEmojiHandling(text string, processFunc func(string) (string,
 
 	for it := emoji.IterateChars(text); it.Next(); {
 		if it.CurrentIsEmoji() {
-			placeholder := fmt.Sprintf("\x00E%d\x00", len(replacements))
+			placeholder := fmt.Sprintf("[EE%d]", len(replacements))
 			replacements = append(replacements, emojiReplacement{
 				original:    it.Current(),
 				placeholder: placeholder,
