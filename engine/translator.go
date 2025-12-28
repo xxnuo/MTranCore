@@ -220,8 +220,16 @@ type TranslationRequest struct {
 
 // Translate translates text provided in the request into a model target language.
 func (t *Translator) Translate(ctx context.Context, request TranslationRequest) (string, error) {
-	// Safety check for long text to avoid WASM crash
-	// Only apply this logic if HTML processing is disabled, as splitting HTML is complex
+	return processTextWithEmojiHandling(request.Text, func(cleanText string) (string, error) {
+		req := TranslationRequest{
+			Text:    cleanText,
+			Options: request.Options,
+		}
+		return t.translateInternal(ctx, req)
+	})
+}
+
+func (t *Translator) translateInternal(ctx context.Context, request TranslationRequest) (string, error) {
 	if !request.Options.HTML && len(request.Text) > t.maxLengthBreak {
 		return t.translateLongText(ctx, request)
 	}
