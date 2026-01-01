@@ -9,19 +9,19 @@ import (
 )
 
 func TestNewServer(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	cfg := &Config{ModelDir: "./", EnableHTTP: true}
+	server := NewUnifiedServer(cfg)
 	if server == nil {
-		t.Fatal("NewServer() returned nil")
+		t.Fatal("NewUnifiedServer() returned nil")
 	}
 	if server.GetApp() == nil {
-		t.Error("NewServer() app is nil")
+		t.Error("NewUnifiedServer() app is nil")
 	}
 }
 
 func TestServer_Health(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	cfg := &Config{ModelDir: "./", EnableHTTP: true}
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	req := httptest.NewRequest("GET", "/health", nil)
@@ -37,12 +37,12 @@ func TestServer_Health(t *testing.T) {
 }
 
 func TestServer_Ready(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	cfg := &Config{ModelDir: "./", EnableHTTP: true}
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	t.Run("engine not ready", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/ready", nil)
+		req := httptest.NewRequest("GET", "/health", nil)
 		resp, err := server.GetApp().Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error = %v", err)
@@ -74,8 +74,8 @@ func TestServer_Ready(t *testing.T) {
 }
 
 func TestServer_ErrorHandler(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	cfg := &Config{ModelDir: "./", EnableHTTP: true}
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	// Test with a non-existent route
