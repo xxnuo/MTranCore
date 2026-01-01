@@ -1,13 +1,11 @@
 package main
 
 import (
-	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -16,32 +14,24 @@ import (
 	"github.com/kiuber/gofiber3-contrib/websocket"
 
 	engine "github.com/xxnuo/MTranCore/engine"
+	"github.com/xxnuo/MTranCore/internal/logger"
 )
 
-// UnifiedServer represents a unified server handling HTTP, WebSocket, and gRPC
 type UnifiedServer struct {
-	// Fiber app for HTTP and WebSocket
-	app *fiber.App
-
-	// gRPC service
-	grpcService *GRPCServer
-
-	// Shared engine manager
+	app            *fiber.App
+	grpcService    *GRPCServer
 	engineManager  *EngineManager
 	shutdownCh     chan struct{}
 	config         *Config
-	activeReqs     int32 // atomic counter for active requests
+	activeReqs     int32
 	isShuttingDown atomic.Bool
 }
 
-// NewUnifiedServer creates a new unified server instance
 func NewUnifiedServer(cfg *Config) *UnifiedServer {
-	// Redirect Fiber's log output to our standard logger
 	if log := logger.GetLogger(); log != nil {
 		fiberLogger := log.GetWriter(logger.LogLevelInfo)
 		fiberlog.SetOutput(fiberLogger)
 	} else {
-		// Discard Fiber logs if no logger is set
 		fiberlog.SetOutput(io.Discard)
 	}
 
@@ -51,7 +41,7 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 			if e, ok := err.(*fiber.Error); ok {
 				code = e.Code
 			}
-			return c.Status(code).JSON(NewErrorResponse(CodePoweronUnknownError, err.Error()))
+			return c.Status(code).JSON(NewErrorResponse(CodeInternalError, err.Error()))
 		},
 	})
 
@@ -62,20 +52,14 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 		engineManager: NewEngineManager(cfg),
 	}
 
-	// Suppress Fiber's server logger output
 	app.Server().Logger = &logger.DiscardLogger{}
 
-	// HTTP Routes (if enabled)
 	if cfg.EnableHTTP {
 		app.Get("/health", server.health)
-		app.Post("/poweron", server.poweron)
-		app.Post("/poweroff", server.poweroff)
-		app.Post("/reboot", server.reboot)
-		app.Get("/ready", server.ready)
-		app.Post("/compute", server.compute)
+		app.Post("/trans", server.trans)
+		app.Post("/exit", server.exit)
 	}
 
-	// WebSocket Routes (if enabled)
 	if cfg.EnableWebSocket {
 		app.Use("/ws", func(c fiber.Ctx) error {
 			if websocket.IsWebSocketUpgrade(c) {
@@ -89,67 +73,84 @@ func NewUnifiedServer(cfg *Config) *UnifiedServer {
 	return server
 }
 
-// GetApp returns the fiber app instance
 func (s *UnifiedServer) GetApp() *fiber.App {
 	return s.app
 }
 
-// ===== HTTP Handlers =====
-
-// health handles the /health endpoint
 func (s *UnifiedServer) health(c fiber.Ctx) error {
-	return c.SendStatus(fiber.StatusOK)
+	ready := s.engineManager.IsReady()
+	return c.JSON(StandardResponse{
+		Code:    CodeSuccess,
+		Message: "OK",
+		Data: map[string]interface{}{
+			"ready": ready,
+		},
+	})
 }
 
-// poweron handles the /poweron endpoint
-func (s *UnifiedServer) poweron(c fiber.Ctx) error {
-	var req PoweronRequest
+func (s *UnifiedServer) trans(c fiber.Ctx) error {
+	if s.isShuttingDown.Load() {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(NewErrorResponse(CodeInternalError, "server is shutting down"))
+	}
+
+	atomic.AddInt32(&s.activeReqs, 1)
+	defer atomic.AddInt32(&s.activeReqs, -1)
+
+	type TransReq struct {
+		Text string `json:"text"`
+		HTML bool   `json:"html"`
+	}
+
+	var req TransReq
 	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodePoweronInvalidParams, "Invalid JSON: "+err.Error()))
+		return c.Status(fiber.StatusBadRequest).JSON(NewErrorResponse(CodeInvalidParams, "Invalid request body"))
 	}
 
-	ctx := context.Background()
-	result := s.engineManager.PoweronWithRequest(ctx, req)
+	if req.Text == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(NewErrorResponse(CodeInvalidParams, "text is required"))
+	}
 
-	if !result.Success {
-		statusCode := fiber.StatusInternalServerError
-		switch result.ErrorCode {
-		case CodePoweronInvalidParams:
-			statusCode = fiber.StatusBadRequest
-		case CodePoweronPathNotExists:
-			statusCode = fiber.StatusNotFound
-		case CodePoweronIncompleteFiles:
-			statusCode = fiber.StatusBadRequest
+	queue := s.engineManager.GetQueue()
+	if queue == nil || !queue.IsReady() {
+		return c.Status(fiber.StatusServiceUnavailable).JSON(NewErrorResponse(CodeNotReady, "Translation engine not ready"))
+	}
+
+	transReq := engine.TranslationRequest{
+		Text: req.Text,
+		Options: engine.TranslationOptions{
+			HTML: req.HTML,
+		},
+	}
+
+	result, err := queue.Translate(context.Background(), transReq)
+	if err != nil {
+		if isFatalWASMError(err) {
+			logger.Error("Fatal WASM error detected, exiting process: %v", err)
+			go func() {
+				time.Sleep(100 * time.Millisecond)
+				os.Exit(1)
+			}()
 		}
-		return c.Status(statusCode).JSON(
-			NewErrorResponse(result.ErrorCode, result.ErrorMessage))
+		return c.Status(fiber.StatusInternalServerError).JSON(NewErrorResponse(CodeTransFailure, fmt.Sprintf("Translation failed: %v", err)))
 	}
 
-	// Update gRPC service if exists
-	if s.grpcService != nil {
-		s.grpcService.engineManager = s.engineManager
-	}
-
-	message := "Engine loaded successfully"
-	if result.AlreadyLoaded {
-		message = "Engine already loaded"
-	}
-
-	return c.JSON(NewSuccessResponse(fiber.Map{"message": message}))
+	return c.SendString(result)
 }
 
-// poweroff handles the /poweroff endpoint
-func (s *UnifiedServer) poweroff(c fiber.Ctx) error {
-	var req PoweroffRequest
+func (s *UnifiedServer) exit(c fiber.Ctx) error {
+	type ExitReq struct {
+		Time  int  `json:"time"`
+		Force bool `json:"force"`
+	}
+
+	var req ExitReq
 	if err := c.Bind().JSON(&req); err != nil {
 		req.Time = 0
 		req.Force = false
 	}
 
 	if req.Time < 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodePoweroffInvalidParams, "time must be non-negative"))
+		return c.Status(fiber.StatusBadRequest).JSON(NewErrorResponse(CodeInvalidParams, "time must be non-negative"))
 	}
 
 	s.isShuttingDown.Store(true)
@@ -163,446 +164,161 @@ func (s *UnifiedServer) poweroff(c fiber.Ctx) error {
 			s.engineManager.WaitForIdle(&s.activeReqs, 30*time.Second)
 		}
 
-		if err := s.app.Shutdown(); err != nil {
-			logger.Error("Error during shutdown: %v", err)
-		}
 		close(s.shutdownCh)
 	}()
 
-	if req.Force {
-		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Server is shutting down"}))
-	}
-	return c.JSON(NewErrorResponse(CodePoweroffWaitingTask, "Server is shutting down, waiting for requests to complete"))
+	return c.JSON(NewSuccessResponse(map[string]string{
+		"message": "Shutdown initiated",
+	}))
 }
 
-// reboot handles the /reboot endpoint
-func (s *UnifiedServer) reboot(c fiber.Ctx) error {
-	var req RebootRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		// If no body provided, use defaults
-		req.Time = 0
-		req.Force = false
-	}
-
-	// Validate parameters
-	if req.Time < 0 {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodeRebootInvalidParams, "time must be non-negative"))
-	}
-
-	// Handle reboot in goroutine if time is specified
-	if req.Time > 0 {
-		s.engineManager.RebootAsync(req.Time, req.Force, &s.activeReqs, nil)
-		return c.JSON(NewSuccessResponse(fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"}))
-	}
-
-	// Immediate reboot
-	ctx := context.Background()
-	result := s.engineManager.Reboot(ctx, req.Force, &s.activeReqs)
-
-	if !result.Success {
-		statusCode := fiber.StatusInternalServerError
-		if result.ErrorCode == CodeRebootWaitingTask {
-			statusCode = fiber.StatusRequestTimeout
-		}
-		return c.Status(statusCode).JSON(
-			NewErrorResponse(result.ErrorCode, result.ErrorMessage))
-	}
-
-	message := "Engine rebooted successfully"
-	if req.Force {
-		message = "Engine rebooted (forced)"
-	}
-
-	return c.JSON(NewSuccessResponse(fiber.Map{"message": message}))
-}
-
-// ready handles the /ready endpoint
-func (s *UnifiedServer) ready(c fiber.Ctx) error {
-	isReady := s.engineManager.IsReady()
-	return c.JSON(NewSuccessResponse(ReadyResponse{Ready: isReady}))
-}
-
-// compute handles the /compute endpoint
-func (s *UnifiedServer) compute(c fiber.Ctx) error {
+func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
 	atomic.AddInt32(&s.activeReqs, 1)
 	defer atomic.AddInt32(&s.activeReqs, -1)
 
-	if s.isShuttingDown.Load() {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(
-			NewErrorResponse(CodeComputeInternalError, "Server is shutting down"))
+	type WSRequest struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data,omitempty"`
 	}
 
-	var req ComputeRequest
-	if err := c.Bind().JSON(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodeComputeInvalidParams, "Invalid JSON: "+err.Error()))
+	type WSResponse struct {
+		Type string      `json:"type"`
+		Code ErrorCode   `json:"code"`
+		Msg  string      `json:"msg,omitempty"`
+		Data interface{} `json:"data,omitempty"`
 	}
-
-	if req.Text == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(
-			NewErrorResponse(CodeComputeInvalidParams, "text is required"))
-	}
-
-	if !s.engineManager.IsReady() {
-		return c.Status(fiber.StatusServiceUnavailable).JSON(
-			NewErrorResponse(CodeComputeInvalidParams, "Engine is not ready. Please call poweron first"))
-	}
-
-	translationReq := engine.TranslationRequest{
-		Text: req.Text,
-		Options: engine.TranslationOptions{
-			HTML: req.HTML,
-		},
-	}
-
-	ctx := context.Background()
-	queue := s.engineManager.GetQueue()
-	translatedText, err := queue.Translate(ctx, translationReq)
-	if err != nil {
-		errMsg := err.Error()
-		// Check for fatal WASM errors (module closed, exit_code, etc.)
-		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
-			logger.Error("Fatal WASM error detected, triggering reboot: %v", err)
-			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
-		}
-
-		return c.Status(fiber.StatusInternalServerError).JSON(
-			NewErrorResponse(CodeComputeFailure, "Translation failed: "+errMsg))
-	}
-
-	// Return plain text on success
-	c.Set("Content-Type", "text/plain; charset=utf-8")
-	return c.SendString(translatedText)
-}
-
-// ===== WebSocket Handlers =====
-
-// handleWebSocket handles websocket connections
-func (s *UnifiedServer) handleWebSocket(c *websocket.Conn) {
-	defer c.Close()
-
-	logger.Debug("[WebSocket] New connection from %s", c.RemoteAddr().String())
 
 	for {
-		var msg WSMessage
-		err := c.ReadJSON(&msg)
-		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				logger.Error("[WebSocket] Error reading message: %v", err)
-			}
+		var req WSRequest
+		if err := c.ReadJSON(&req); err != nil {
+			logger.Debug("[WebSocket] Read error: %v", err)
 			break
 		}
 
-		var response WSResponse
-		switch msg.Type {
-		case "poweron":
-			response = s.handleWSPoweron(msg.Data)
-		case "poweroff":
-			response = s.handleWSPoweroff(msg.Data)
-		case "reboot":
-			response = s.handleWSReboot(msg.Data)
-		case "ready":
-			response = s.handleWSReady()
-		case "compute":
-			response = s.handleWSCompute(msg.Data)
+		logger.Debug("[WebSocket] Received message type: %s", req.Type)
+
+		var resp WSResponse
+		resp.Type = req.Type
+
+		switch req.Type {
+		case "health":
+			ready := s.engineManager.IsReady()
+			resp.Code = CodeSuccess
+			resp.Msg = "OK"
+			resp.Data = map[string]interface{}{
+				"ready": ready,
+			}
+
+		case "trans":
+			type TransData struct {
+				Text string `json:"text"`
+				HTML bool   `json:"html"`
+			}
+			var data TransData
+			if err := json.Unmarshal(req.Data, &data); err != nil {
+				resp.Code = CodeInvalidParams
+				resp.Msg = "Invalid data"
+				break
+			}
+
+			if data.Text == "" {
+				resp.Code = CodeInvalidParams
+				resp.Msg = "text is required"
+				break
+			}
+
+			queue := s.engineManager.GetQueue()
+			if queue == nil || !queue.IsReady() {
+				resp.Code = CodeNotReady
+				resp.Msg = "Translation engine not ready"
+				break
+			}
+
+			transReq := engine.TranslationRequest{
+				Text: data.Text,
+				Options: engine.TranslationOptions{
+					HTML: data.HTML,
+				},
+			}
+
+			result, err := queue.Translate(context.Background(), transReq)
+			if err != nil {
+				if isFatalWASMError(err) {
+					logger.Error("Fatal WASM error detected, exiting process: %v", err)
+					go func() {
+						time.Sleep(100 * time.Millisecond)
+						os.Exit(1)
+					}()
+				}
+				resp.Code = CodeTransFailure
+				resp.Msg = fmt.Sprintf("Translation failed: %v", err)
+				break
+			}
+
+			resp.Code = CodeSuccess
+			resp.Msg = "OK"
+			resp.Data = map[string]string{
+				"translated_text": result,
+			}
+
+		case "exit":
+			type ExitData struct {
+				Time  int  `json:"time"`
+				Force bool `json:"force"`
+			}
+			var data ExitData
+			if err := json.Unmarshal(req.Data, &data); err != nil {
+				data.Time = 0
+				data.Force = false
+			}
+
+			if data.Time < 0 {
+				resp.Code = CodeInvalidParams
+				resp.Msg = "time must be non-negative"
+				break
+			}
+
+			s.isShuttingDown.Store(true)
+
+			go func() {
+				if data.Time > 0 {
+					time.Sleep(time.Duration(data.Time) * time.Second)
+				}
+
+				if !data.Force {
+					s.engineManager.WaitForIdle(&s.activeReqs, 30*time.Second)
+				}
+
+				close(s.shutdownCh)
+			}()
+
+			resp.Code = CodeSuccess
+			resp.Msg = "Shutdown initiated"
+
 		default:
-			response = WSResponse{
-				Type: msg.Type,
-				Code: int(CodePoweronUnknownError),
-				Msg:  "Unknown message type: " + msg.Type,
-			}
+			resp.Code = CodeInvalidParams
+			resp.Msg = fmt.Sprintf("Unknown message type: %s", req.Type)
 		}
 
-		if err := c.WriteJSON(response); err != nil {
-			logger.Error("[WebSocket] Error sending response: %v", err)
-			break
-		}
-
-		if msg.Type == "poweroff" {
+		if err := c.WriteJSON(resp); err != nil {
+			logger.Debug("[WebSocket] Write error: %v", err)
 			break
 		}
 	}
-
-	logger.Debug("[WebSocket] Connection closed from %s", c.RemoteAddr().String())
 }
 
-// handleWSPoweron handles poweron message
-func (s *UnifiedServer) handleWSPoweron(data json.RawMessage) WSResponse {
-	var req PoweronRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		return WSResponse{
-			Type: "poweron",
-			Code: int(CodePoweronInvalidParams),
-			Msg:  "Invalid JSON: " + err.Error(),
-		}
-	}
-
-	ctx := context.Background()
-	result := s.engineManager.PoweronWithRequest(ctx, req)
-
-	if !result.Success {
-		return WSResponse{
-			Type: "poweron",
-			Code: int(result.ErrorCode),
-			Msg:  result.ErrorMessage,
-		}
-	}
-
-	// Update gRPC service if exists
-	if s.grpcService != nil {
-		s.grpcService.engineManager = s.engineManager
-	}
-
-	message := "Engine loaded successfully"
-	if result.AlreadyLoaded {
-		message = "Engine already loaded"
-	}
-
-	return WSResponse{
-		Type: "poweron",
-		Code: int(CodeSuccess),
-		Msg:  "success",
-		Data: fiber.Map{"message": message},
-	}
-}
-
-// handleWSPoweroff handles poweroff message
-func (s *UnifiedServer) handleWSPoweroff(data json.RawMessage) WSResponse {
-	var req PoweroffRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		req.Time = 0
-		req.Force = false
-	}
-
-	if req.Time < 0 {
-		return WSResponse{
-			Type: "poweroff",
-			Code: int(CodePoweroffInvalidParams),
-			Msg:  "time must be non-negative",
-		}
-	}
-
-	s.isShuttingDown.Store(true)
-
-	go func() {
-		if req.Time > 0 {
-			time.Sleep(time.Duration(req.Time) * time.Second)
-		}
-
-		if !req.Force {
-			s.engineManager.WaitForIdle(&s.activeReqs, 30*time.Second)
-		}
-
-		if err := s.app.Shutdown(); err != nil {
-			logger.Error("Error during shutdown: %v", err)
-		}
-		close(s.shutdownCh)
-	}()
-
-	if req.Force {
-		return WSResponse{
-			Type: "poweroff",
-			Code: int(CodeSuccess),
-			Msg:  "success",
-			Data: fiber.Map{"message": "Server is shutting down"},
-		}
-	}
-	return WSResponse{
-		Type: "poweroff",
-		Code: int(CodePoweroffWaitingTask),
-		Msg:  "Server is shutting down, waiting for requests to complete",
-	}
-}
-
-// handleWSReboot handles reboot message
-func (s *UnifiedServer) handleWSReboot(data json.RawMessage) WSResponse {
-	var req RebootRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		// If no body provided, use defaults
-		req.Time = 0
-		req.Force = false
-	}
-
-	// Validate parameters
-	if req.Time < 0 {
-		return WSResponse{
-			Type: "reboot",
-			Code: int(CodeRebootInvalidParams),
-			Msg:  "time must be non-negative",
-		}
-	}
-
-	// Handle reboot in goroutine if time is specified
-	if req.Time > 0 {
-		s.engineManager.RebootAsync(req.Time, req.Force, &s.activeReqs, nil)
-		return WSResponse{
-			Type: "reboot",
-			Code: int(CodeSuccess),
-			Msg:  "success",
-			Data: fiber.Map{"message": "Engine will reboot in " + fmt.Sprintf("%d", req.Time) + " seconds"},
-		}
-	}
-
-	// Immediate reboot
-	ctx := context.Background()
-	result := s.engineManager.Reboot(ctx, req.Force, &s.activeReqs)
-
-	if !result.Success {
-		return WSResponse{
-			Type: "reboot",
-			Code: int(result.ErrorCode),
-			Msg:  result.ErrorMessage,
-		}
-	}
-
-	message := "Engine rebooted successfully"
-	if req.Force {
-		message = "Engine rebooted (forced)"
-	}
-
-	return WSResponse{
-		Type: "reboot",
-		Code: int(CodeSuccess),
-		Msg:  "success",
-		Data: fiber.Map{"message": message},
-	}
-}
-
-// handleWSReady handles ready message
-func (s *UnifiedServer) handleWSReady() WSResponse {
-	isReady := s.engineManager.IsReady()
-	return WSResponse{
-		Type: "ready",
-		Code: int(CodeSuccess),
-		Msg:  "success",
-		Data: ReadyResponse{Ready: isReady},
-	}
-}
-
-// handleWSCompute handles compute message
-func (s *UnifiedServer) handleWSCompute(data json.RawMessage) WSResponse {
-	logger.Debug("[DEBUG-WS] handleWSCompute: starting")
-	atomic.AddInt32(&s.activeReqs, 1)
-	defer atomic.AddInt32(&s.activeReqs, -1)
-
-	if s.isShuttingDown.Load() {
-		logger.Debug("[DEBUG-WS] handleWSCompute: server is shutting down")
-		return WSResponse{
-			Type: "compute",
-			Code: int(CodeComputeInternalError),
-			Msg:  "Server is shutting down",
-		}
-	}
-
-	var req ComputeRequest
-	if err := json.Unmarshal(data, &req); err != nil {
-		logger.Debug("[DEBUG-WS] handleWSCompute: invalid JSON: %v", err)
-		return WSResponse{
-			Type: "compute",
-			Code: int(CodeComputeInvalidParams),
-			Msg:  "Invalid JSON: " + err.Error(),
-		}
-	}
-	logger.Debug("[DEBUG-WS] handleWSCompute: req.Text length=%d, req.HTML=%v", len(req.Text), req.HTML)
-
-	if req.Text == "" {
-		logger.Debug("[DEBUG-WS] handleWSCompute: text is empty")
-		return WSResponse{
-			Type: "compute",
-			Code: int(CodeComputeInvalidParams),
-			Msg:  "text is required",
-		}
-	}
-
-	isReady := s.engineManager.IsReady()
-	logger.Debug("[DEBUG-WS] handleWSCompute: engineManager.IsReady()=%v", isReady)
-	if !isReady {
-		return WSResponse{
-			Type: "compute",
-			Code: int(CodeComputeInvalidParams),
-			Msg:  "Engine is not ready. Please call poweron first",
-		}
-	}
-
-	translationReq := engine.TranslationRequest{
-		Text: req.Text,
-		Options: engine.TranslationOptions{
-			HTML: req.HTML,
-		},
-	}
-
-	ctx := context.Background()
-	logger.Debug("[DEBUG-WS] handleWSCompute: getting queue")
-	queue := s.engineManager.GetQueue()
-	logger.Debug("[DEBUG-WS] handleWSCompute: queue=%v, calling Translate", queue)
-	translatedText, err := queue.Translate(ctx, translationReq)
-	logger.Debug("[DEBUG-WS] handleWSCompute: Translate returned, err=%v", err)
-	if err != nil {
-		errMsg := err.Error()
-		// Check for fatal WASM errors (module closed, exit_code, etc.)
-		if strings.Contains(errMsg, "module closed") || strings.Contains(errMsg, "exit_code") {
-			logger.Error("Fatal WASM error detected (WebSocket), triggering reboot: %v", err)
-			s.engineManager.RebootAsync(0, true, &s.activeReqs, nil)
-		}
-
-		return WSResponse{
-			Type: "compute",
-			Code: int(CodeComputeFailure),
-			Msg:  "Translation failed: " + errMsg,
-		}
-	}
-
-	return WSResponse{
-		Type: "compute",
-		Code: int(CodeSuccess),
-		Msg:  "success",
-		Data: ComputeResponse{TranslatedText: translatedText},
-	}
-}
-
-// SetGRPCService sets the gRPC service reference for shared state
 func (s *UnifiedServer) SetGRPCService(grpc *GRPCServer) {
 	s.grpcService = grpc
-	grpc.engineManager = s.engineManager
+	s.engineManager = grpc.engineManager
 }
 
-// ShutdownChannel returns the shutdown channel
 func (s *UnifiedServer) ShutdownChannel() <-chan struct{} {
 	return s.shutdownCh
 }
 
-// Close closes the server and releases resources
 func (s *UnifiedServer) Close() error {
-	return s.engineManager.Close()
-}
-
-// Listen starts the unified server (HTTP/WebSocket only, gRPC handled separately)
-func (s *UnifiedServer) Listen(addr string) error {
-	// Temporarily redirect stdout to suppress Fiber's startup banner
-	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
-	os.Stdout = w
-
-	// Start listening in a goroutine
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- s.app.Listen(addr, fiber.ListenConfig{
-			DisableStartupMessage: true,
-		})
-	}()
-
-	// Wait a bit for startup messages to be written
-	time.Sleep(100 * time.Millisecond)
-
-	// Restore stdout
-	w.Close()
-	os.Stdout = oldStdout
-
-	// Discard the captured output
-	io.Copy(io.Discard, r)
-	r.Close()
-
-	// Return any error
-	return <-errCh
+	if s.engineManager != nil {
+		return s.engineManager.Close()
+	}
+	return nil
 }

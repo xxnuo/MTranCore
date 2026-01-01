@@ -7,30 +7,40 @@ import (
 	"strings"
 )
 
-// Config holds the worker service configuration
+type arrayFlags []string
+
+func (a *arrayFlags) String() string {
+	return strings.Join(*a, ", ")
+}
+
+func (a *arrayFlags) Set(value string) error {
+	*a = append(*a, value)
+	return nil
+}
+
 type Config struct {
 	LogLevel string
-	WorkDir  string
+	ModelDir string
 
-	// Unified server configuration
 	ServerHost string
 	ServerPort string
 
-	// gRPC Unix socket configuration
-	GRPCUnixSocket string // Path to Unix socket file for gRPC (if enabled)
+	GRPCUnixSocket string
 
 	EnableHTTP      bool
 	EnableWebSocket bool
 	EnableGRPC      bool
 
 	MaxLengthBreak int
+
+	ModelPath            string
+	LexicalShortlistPath string
+	VocabularyPaths      []string
 }
 
-// GetConfig loads configuration with priority: CLI flags > environment variables > defaults
 func GetConfig() *Config {
-	// Define command line flags
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
-	workDir := flag.String("work-dir", "", "Working directory")
+	modelDir := flag.String("model-dir", "", "Model directory (auto poweron)")
 	serverHost := flag.String("host", "", "Server host address")
 	serverPort := flag.String("port", "", "Server port")
 	grpcUnixSocket := flag.String("grpc-unix-socket", "", "Path to Unix socket file for gRPC")
@@ -39,9 +49,13 @@ func GetConfig() *Config {
 	enableGRPC := flag.String("enable-grpc", "", "Enable gRPC server (true/false)")
 	maxLengthBreak := flag.Int("max-length-break", 0, "Max text length before auto-splitting (default 200)")
 
+	modelPath := flag.String("model-path", "", "Model file path (auto poweron)")
+	lexicalShortlistPath := flag.String("lexical-shortlist-path", "", "Lexical shortlist file path (auto poweron)")
+	var vocabularyPaths arrayFlags
+	flag.Var(&vocabularyPaths, "vocabulary-path", "Vocabulary file path (auto poweron, can be specified multiple times)")
+
 	flag.Parse()
 
-	// Helper function to get value with priority: flag > env > default
 	getConfigValue := func(flagValue, envKey, defaultValue string) string {
 		if flagValue != "" {
 			return flagValue
@@ -49,7 +63,6 @@ func GetConfig() *Config {
 		return getEnvOrDefault(envKey, defaultValue)
 	}
 
-	// Helper function to get boolean value with priority
 	getBoolConfigValue := func(flagValue, envKey, defaultValue string) bool {
 		if flagValue != "" {
 			return parseBool(flagValue)
@@ -57,7 +70,6 @@ func GetConfig() *Config {
 		return parseBool(getEnvOrDefault(envKey, defaultValue))
 	}
 
-	// Helper function to get int value with priority
 	getIntConfigValue := func(flagValue int, envKey string, defaultValue int) int {
 		if flagValue != 0 {
 			return flagValue
@@ -72,13 +84,11 @@ func GetConfig() *Config {
 
 	return &Config{
 		LogLevel: getConfigValue(*logLevel, "LOG_LEVEL", "info"),
-		WorkDir:  getConfigValue(*workDir, "WORK_DIR", "./"),
+		ModelDir: getConfigValue(*modelDir, "MODEL_DIR", ""),
 
-		// Unified server configuration
 		ServerHost: getConfigValue(*serverHost, "SERVER_HOST", "0.0.0.0"),
 		ServerPort: getConfigValue(*serverPort, "SERVER_PORT", "8988"),
 
-		// gRPC Unix socket configuration
 		GRPCUnixSocket: getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", ""),
 
 		EnableHTTP:      getBoolConfigValue(*enableHTTP, "ENABLE_HTTP", "true"),
@@ -86,6 +96,10 @@ func GetConfig() *Config {
 		EnableGRPC:      getBoolConfigValue(*enableGRPC, "ENABLE_GRPC", "true"),
 
 		MaxLengthBreak: getIntConfigValue(*maxLengthBreak, "MAX_LENGTH_BREAK", 200),
+
+		ModelPath:            getConfigValue(*modelPath, "MODEL_PATH", ""),
+		LexicalShortlistPath: getConfigValue(*lexicalShortlistPath, "LEXICAL_SHORTLIST_PATH", ""),
+		VocabularyPaths:      vocabularyPaths,
 	}
 }
 

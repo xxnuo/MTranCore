@@ -52,7 +52,10 @@ func main() {
 	logger.Debug("[DEBUG-MAIN] Configuration loaded")
 	logger.Info("Starting MTranCore Worker Service (Unified)")
 	logger.Info("Log Level: %s", cfg.LogLevel)
-	logger.Info("Work Directory: %s", cfg.WorkDir)
+	if cfg.ModelDir != "" {
+		logger.Info("Model Directory: %s", cfg.ModelDir)
+	}
+	
 	logger.Info("Server Address: %s:%s", cfg.ServerHost, cfg.ServerPort)
 	// logger.Info("==============================================")
 
@@ -145,7 +148,7 @@ func main() {
 			logger.Debug("  - Reboot")
 			logger.Debug("  - Ready")
 			logger.Debug("  - Compute")
-			logger.Debug("  - ComputeStream")
+			logger.Debug("  - TransStream")
 
 			if err := grpcServerInstance.Serve(grpcListener); err != nil {
 				if isClosedConnectionError(err) {
@@ -202,21 +205,21 @@ func main() {
 				logger.Info("[HTTP] Starting server on %s", addr)
 				logger.Debug("[HTTP] Available endpoints:")
 				logger.Debug("  GET  /health   - Health check")
-				logger.Debug("  POST /poweron  - Load translation engine")
-				logger.Debug("  POST /poweroff - Shutdown server")
-				logger.Debug("  POST /reboot   - Reload translation engine")
-				logger.Debug("  GET  /ready    - Check engine status")
-				logger.Debug("  POST /compute  - Translate text")
+				logger.Debug("  POST /health - Health check engine")
+				logger.Debug("  POST /trans  - Translate text server")
+				logger.Debug("  POST /exit   - Shutdown server translation engine")
+				logger.Debug("  GET  / status")
+				logger.Debug("  POST / text")
 			}
 			if cfg.EnableWebSocket {
 				logger.Info("[WebSocket] Starting server on %s", addr)
 				logger.Debug("[WebSocket] Available at /ws")
 				logger.Debug("[WebSocket] Message types:")
-				logger.Debug("  - poweron  - Load translation engine")
-				logger.Debug("  - poweroff - Shutdown server")
-				logger.Debug("  - reboot   - Reload translation engine")
-				logger.Debug("  - ready    - Check engine status")
-				logger.Debug("  - compute  - Translate text")
+				logger.Debug("  - health - Health check engine")
+				logger.Debug("  - trans  - Translate text server")
+				logger.Debug("  - exit   - Shutdown server translation engine")
+				logger.Debug("  -  status")
+				logger.Debug("  -  text")
 			}
 
 			// Use the HTTP listener from cmux

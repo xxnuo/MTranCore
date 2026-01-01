@@ -6,95 +6,40 @@ option go_package = "github.com/xxnuo/MTranCore/proto;proto";
 
 // TranslatorService provides translation capabilities
 service TranslatorService {
-  // Health check
   rpc Health(HealthRequest) returns (HealthResponse);
-  
-  // Poweron loads the translation engine with model files
-  rpc Poweron(PoweronRequest) returns (PoweronResponse);
-  
-  // Poweroff shuts down the server
-  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
-  
-  // Reboot reloads the translation engine
-  rpc Reboot(RebootRequest) returns (RebootResponse);
-  
-  // Ready gets the current engine status
-  rpc Ready(ReadyRequest) returns (ReadyResponse);
-  
-  // Compute translates a single text
-  rpc Compute(ComputeRequest) returns (ComputeResponse);
-  
-  // ComputeStream translates multiple texts in streaming fashion
-  rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
+
+  rpc Trans(TransRequest) returns (TransResponse);
+
+  rpc TransStream(stream TransRequest) returns (stream TransResponse);
+
+  rpc Exit(ExitRequest) returns (ExitResponse);
 }
 
-// HealthRequest is empty
 message HealthRequest {}
 
-// HealthResponse indicates server health
 message HealthResponse {
-  int32 code = 1;
-  string message = 2;
-}
-
-// PoweronRequest contains the path to model directory or individual file paths
-message PoweronRequest {
-  string path = 1;                            // Path to model directory (optional if individual paths provided)
-  string model_path = 2;                      // Path to model file (optional, takes priority over path)
-  string lexical_shortlist_path = 3;          // Path to lexical shortlist file (optional, takes priority over path)
-  string vocabulary_path = 4;                 // Path to vocabulary file (optional, merged with vocabulary_paths)
-  repeated string vocabulary_paths = 5;       // Paths to vocabulary files (optional, merged with vocabulary_path)
-}
-
-// PoweronResponse indicates whether the engine loaded successfully
-message PoweronResponse {
-  int32 code = 1;
-  string message = 2;
-}
-
-// PoweroffRequest contains shutdown parameters
-message PoweroffRequest {
-  int32 time = 1;   // seconds to wait before shutdown
-  bool force = 2;   // force shutdown without waiting
-}
-
-// PoweroffResponse indicates shutdown status
-message PoweroffResponse {
-  int32 code = 1;
-  string message = 2;
-}
-
-// RebootRequest contains reboot parameters
-message RebootRequest {
-  int32 time = 1;   // seconds to wait before reboot
-  bool force = 2;   // force reboot without waiting for active requests
-}
-
-// RebootResponse indicates reboot status
-message RebootResponse {
-  int32 code = 1;
-  string message = 2;
-}
-
-// ReadyRequest is empty
-message ReadyRequest {}
-
-// ReadyResponse indicates whether an engine is loaded
-message ReadyResponse {
   int32 code = 1;
   string message = 2;
   bool ready = 3;
 }
 
-// ComputeRequest contains the text to translate
-message ComputeRequest {
+message TransRequest {
   string text = 1;
   bool html = 2;
 }
 
-// ComputeResponse contains the translated text
-message ComputeResponse {
+message TransResponse {
   int32 code = 1;
   string message = 2;
   string translated_text = 3;
+}
+
+message ExitRequest {
+  int32 time = 1;
+  bool force = 2;
+}
+
+message ExitResponse {
+  int32 code = 1;
+  string message = 2;
 }

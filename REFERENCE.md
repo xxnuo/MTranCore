@@ -23,22 +23,15 @@ All protocols share the same business logic and error codes, providing consisten
 
 ## Error Codes
 
-The service uses standardized error codes across all protocols:
+The service uses simplified HTTP-standard error codes:
 
-| Code | Constant                     | Description                                |
-| ---- | ---------------------------- | ------------------------------------------ |
-| 200  | `CodeSuccess`                | Operation completed successfully           |
-| 1000 | `CodePoweronInvalidParams`   | Invalid parameters for poweron request     |
-| 1001 | `CodePoweronPathNotExists`   | Model path does not exist                  |
-| 1002 | `CodePoweronIncompleteFiles` | Model files are incomplete or missing      |
-| 1003 | `CodePoweronInternalError`   | Internal error during poweron              |
-| 1009 | `CodePoweronUnknownError`    | Unknown poweron error                      |
-| 1100 | `CodePoweroffInvalidParams`  | Invalid parameters for poweroff request    |
-| 1101 | `CodePoweroffWaitingTask`    | Server is shutting down, waiting for tasks |
-| 1109 | `CodePoweroffInternalError`  | Internal error during poweroff             |
-| 1200 | `CodeComputeInvalidParams`   | Invalid parameters for compute request     |
-| 1201 | `CodeComputeFailure`         | Translation computation failed             |
-| 1209 | `CodeComputeInternalError`   | Internal error during compute              |
+| Code | Constant | Description |
+| ---- | -------- | ----------- |
+| 200  | `CodeSuccess` | Operation completed successfully |
+| 400  | `CodeInvalidParams` | Invalid request parameters |
+| 500  | `CodeTransFailure` | Translation failed |
+| 502  | `CodeInternalError` | Internal server error |
+| 503  | `CodeNotReady` | Translation engine not ready |
 
 ## gRPC Protocol
 
@@ -57,11 +50,9 @@ The gRPC service is defined in `worker.proto`:
 ```proto
 service TranslatorService {
   rpc Health(HealthRequest) returns (HealthResponse);
-  rpc Poweron(PoweronRequest) returns (PoweronResponse);
-  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
-  rpc Ready(ReadyRequest) returns (ReadyResponse);
-  rpc Compute(ComputeRequest) returns (ComputeResponse);
-  rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
+  rpc Trans(TransRequest) returns (TransResponse);
+  rpc TransStream(stream TransRequest) returns (stream TransResponse);
+  rpc Exit(ExitRequest) returns (ExitResponse);
 }
 ```
 
@@ -69,7 +60,7 @@ service TranslatorService {
 
 #### Health
 
-Check server health status.
+Check server health and engine ready status.
 
 **Request**: `HealthRequest` (empty)
 
@@ -77,156 +68,101 @@ Check server health status.
 
 ```proto
 message HealthResponse {
-  int32 code = 1;      // Always 0 for healthy server
+  int32 code = 1;      // 200 for healthy server
   string message = 2;  // "OK"
+  bool ready = 3;      // Engine ready status
 }
 ```
 
-#### Poweron
+#### Trans
 
-Load the translation engine with model files.
+Translate a single text.
 
-**Request**: `PoweronRequest`
+**Request**: `TransRequest`
 
 ```proto
-message PoweronRequest {
-  string path = 1;                            // Path to model directory (optional if individual paths provided)
-  string model_path = 2;                      // Path to model file (optional, takes priority over path)
-  string lexical_shortlist_path = 3;          // Path to lexical shortlist file (optional, takes priority over path)
-  string vocabulary_path = 4;                 // Path to vocabulary file (optional, merged with vocabulary_paths)
-  repeated string vocabulary_paths = 5;       // Paths to vocabulary files (optional, merged with vocabulary_path)
+message TransRequest {
+  string text = 1;  // Text to translate (required)
+  bool html = 2;    // Whether to treat input as HTML (default: false)
 }
 ```
 
-**Response**: `PoweronResponse`
+**Response**: `TransResponse`
 
 ```proto
-message PoweronResponse {
-  int32 code = 1;      // 0 on success, error code otherwise
-  string message = 2;  // Description of the result
+message TransResponse {
+  int32 code = 1;             // 200 on success, error code otherwise
+  string message = 2;         // Description of the result
+  string translated_text = 3; // Translated text (on success)
 }
 ```
-
-**Parameter Priority**:
-
-Individual file paths take priority over `path`. When any of `model_path`, `lexical_shortlist_path`, `vocabulary_path`, or `vocabulary_paths` is provided:
-- `model_path` and `lexical_shortlist_path` are required
-- `vocabulary_path` and `vocabulary_paths` are merged (vocabulary_path first)
-- All paths can be absolute or relative to work_dir
 
 **Error Codes**:
 
-- `1000`: Path is required or individual file paths are incomplete
-- `1001`: Path does not exist
-- `1002`: Model files are incomplete
-- `1003`: Internal error loading engine
+- `400`: Text is required
+- `500`: Translation failed
+- `503`: Engine not ready or server shutting down
 
-#### Poweroff
+#### TransStream
+
+Translate multiple texts using bidirectional streaming.
+
+**Request Stream**: `TransRequest`
+
+```proto
+message TransRequest {
+  string text = 1;  // Text to translate
+  bool html = 2;    // Whether to treat input as HTML
+}
+```
+
+**Response Stream**: `TransResponse`
+
+```proto
+message TransResponse {
+  int32 code = 1;             // 200 on success, error code otherwise
+  string message = 2;         // Description of the result
+  string translated_text = 3; // Translated text (on success)
+}
+```
+
+**Behavior**:
+
+- Client sends multiple `TransRequest` messages
+- Server responds with corresponding `TransResponse` for each request
+- Client closes stream by sending EOF
+- Empty text returns empty translation with success code
+
+#### Exit
 
 Shut down the server gracefully or forcefully.
 
-**Request**: `PoweroffRequest`
+**Request**: `ExitRequest`
 
 ```proto
-message PoweroffRequest {
+message ExitRequest {
   int32 time = 1;   // Seconds to wait before shutdown (default: 0)
   bool force = 2;   // Force shutdown without waiting for active streams
 }
 ```
 
-**Response**: `PoweroffResponse`
+**Response**: `ExitResponse`
 
 ```proto
-message PoweroffResponse {
-  int32 code = 1;      // 0 on success, error code otherwise
+message ExitResponse {
+  int32 code = 1;      // 200 on success, error code otherwise
   string message = 2;  // Description of shutdown status
 }
 ```
 
 **Error Codes**:
 
-- `1100`: Time must be non-negative
-- `1101`: Waiting for active streams to complete (non-force shutdown)
+- `400`: Time must be non-negative
 
 **Behavior**:
 
 - If `force=true`: Immediate shutdown
 - If `force=false`: Waits up to 30 seconds for active streams, then forces shutdown
-
-#### Ready
-
-Check if the translation engine is loaded and ready.
-
-**Request**: `ReadyRequest` (empty)
-
-**Response**: `ReadyResponse`
-
-```proto
-message ReadyResponse {
-  int32 code = 1;      // Always 0
-  string message = 2;  // "OK"
-  bool ready = 3;      // true if engine is loaded
-}
-```
-
-#### Compute
-
-Translate a single text.
-
-**Request**: `ComputeRequest`
-
-```proto
-message ComputeRequest {
-  string text = 1;  // Text to translate (required)
-  bool html = 2;    // Whether to treat input as HTML (default: false)
-}
-```
-
-**Response**: `ComputeResponse`
-
-```proto
-message ComputeResponse {
-  int32 code = 1;             // 0 on success, error code otherwise
-  string message = 2;         // Description of the result
-  string translated_text = 3; // Translated text (on success)
-}
-```
-
-**Error Codes**:
-
-- `1200`: Text is required or engine not ready
-- `1201`: Translation failed
-- `1209`: Server is shutting down
-
-#### ComputeStream
-
-Translate multiple texts using bidirectional streaming.
-
-**Request Stream**: `ComputeRequest`
-
-```proto
-message ComputeRequest {
-  string text = 1;  // Text to translate
-  bool html = 2;    // Whether to treat input as HTML
-}
-```
-
-**Response Stream**: `ComputeResponse`
-
-```proto
-message ComputeResponse {
-  int32 code = 1;             // 0 on success, error code otherwise
-  string message = 2;         // Description of the result
-  string translated_text = 3; // Translated text (on success)
-}
-```
-
-**Behavior**:
-
-- Client sends multiple `ComputeRequest` messages
-- Server responds with corresponding `ComputeResponse` for each request
-- Client closes stream by sending EOF
-- Empty text returns empty translation with success code
 
 ## HTTP Protocol
 
@@ -262,141 +198,21 @@ Error responses:
 
 #### GET /health
 
-Check server health status.
+Check server health and engine ready status.
 
 **Response**: HTTP 200
 
 ```json
-(empty body with status OK)
-```
-
-#### POST /poweron
-
-Load the translation engine with model files.
-
-**Request Body**:
-
-Option 1: Using model directory path
-```json
-{
-  "path": "path/to/model" // Absolute or relative to work_dir
-}
-```
-
-Option 2: Using individual file paths (takes priority over path)
-```json
-{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-}
-```
-
-Option 3: Using individual file paths with dual vocabularies
-```json
-{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_paths": [
-    "models/enzh/srcvocab.enzh.spm",
-    "models/enzh/trgvocab.enzh.spm"
-  ]
-}
-```
-
-**Note**: `vocabulary_path` and `vocabulary_paths` can be used together and will be merged (vocabulary_path first).
-
-**Success Response**: HTTP 200
-
-```json
 {
   "code": 200,
+  "message": "OK",
   "data": {
-    "message": "Engine loaded successfully"
+    "ready": true
   }
 }
 ```
 
-**Error Responses**:
-
-- HTTP 400 (Invalid parameters):
-  ```json
-  {
-    "code": 1000,
-    "message": "path is required" // or "model_path is required when using individual file paths"
-  }
-  ```
-- HTTP 404 (Path not found):
-  ```json
-  {
-    "code": 1001,
-    "message": "path does not exist: /full/path"
-  }
-  ```
-- HTTP 400 (Incomplete files):
-  ```json
-  {
-    "code": 1002,
-    "message": "Missing required model files"
-  }
-  ```
-- HTTP 500 (Internal error):
-  ```json
-  {
-    "code": 1003,
-    "message": "Internal error message"
-  }
-  ```
-
-#### POST /poweroff
-
-Shut down the server gracefully or forcefully.
-
-**Request Body** (optional):
-
-```json
-{
-  "time": 0, // Seconds to wait (default: 0)
-  "force": false // Force shutdown (default: false)
-}
-```
-
-**Success Response**: HTTP 200
-
-```json
-{
-  "code": 200,
-  "data": {
-    "message": "Server is shutting down"
-  }
-}
-```
-
-**Error Response**: HTTP 200
-
-```json
-{
-  "code": 1101,
-  "message": "Server is shutting down, waiting for requests to complete"
-}
-```
-
-#### GET /ready
-
-Check if the translation engine is loaded and ready.
-
-**Success Response**: HTTP 200
-
-```json
-{
-  "code": 200,
-  "data": {
-    "ready": true // or false
-  }
-}
-```
-
-#### POST /compute
+#### POST /trans
 
 Translate text.
 
@@ -420,31 +236,64 @@ Returns the translated text directly as plain text (not JSON).
 - HTTP 400 (Invalid parameters):
   ```json
   {
-    "code": 1200,
+    "code": 400,
     "message": "text is required"
   }
   ```
 - HTTP 503 (Engine not ready):
   ```json
   {
-    "code": 1200,
-    "message": "Engine is not ready. Please call poweron first"
+    "code": 503,
+    "message": "Translation engine not ready"
   }
   ```
 - HTTP 503 (Server shutting down):
   ```json
   {
-    "code": 1209,
-    "message": "Server is shutting down"
+    "code": 503,
+    "message": "server is shutting down"
   }
   ```
 - HTTP 500 (Translation failed):
   ```json
   {
-    "code": 1201,
+    "code": 500,
     "message": "Translation failed: error details"
   }
   ```
+
+#### POST /exit
+
+Shut down the server gracefully or forcefully.
+
+**Request Body** (optional):
+
+```json
+{
+  "time": 0, // Seconds to wait (default: 0)
+  "force": false // Force shutdown (default: false)
+}
+```
+
+**Success Response**: HTTP 200
+
+```json
+{
+  "code": 200,
+  "data": {
+    "message": "Shutdown initiated"
+  }
+}
+```
+
+**Error Response**: HTTP 400
+
+```json
+{
+  "code": 400,
+  "message": "time must be non-negative"
+}
+```
 
 ## WebSocket Protocol
 
@@ -482,104 +331,15 @@ All messages are JSON objects with the following structure:
 
 ### Message Types
 
-#### poweron
+#### health
 
-Load the translation engine with model files.
-
-**Client Message**:
-
-Option 1: Using model directory path
-```json
-{
-  "type": "poweron",
-  "data": {
-    "path": "path/to/model"
-  }
-}
-```
-
-Option 2: Using individual file paths (takes priority over path)
-```json
-{
-  "type": "poweron",
-  "data": {
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-  }
-}
-```
-
-Option 3: Using individual file paths with dual vocabularies
-```json
-{
-  "type": "poweron",
-  "data": {
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_paths": [
-      "models/enzh/srcvocab.enzh.spm",
-      "models/enzh/trgvocab.enzh.spm"
-    ]
-  }
-}
-```
-
-**Server Response**:
-
-```json
-{
-  "type": "poweron",
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "message": "Engine loaded successfully"
-  }
-}
-```
-
-**Error Codes**: Same as HTTP/gRPC poweron errors (1000-1009)
-
-#### poweroff
-
-Shut down the server.
+Check server health and engine ready status.
 
 **Client Message**:
 
 ```json
 {
-  "type": "poweroff",
-  "data": {
-    "time": 0, // Optional, default: 0
-    "force": false // Optional, default: false
-  }
-}
-```
-
-**Server Response**:
-
-```json
-{
-  "type": "poweroff",
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "message": "Server is shutting down"
-  }
-}
-```
-
-**Note**: The WebSocket connection is closed after poweroff response.
-
-#### ready
-
-Check if the translation engine is loaded.
-
-**Client Message**:
-
-```json
-{
-  "type": "ready",
+  "type": "health",
   "data": {}
 }
 ```
@@ -588,16 +348,16 @@ Check if the translation engine is loaded.
 
 ```json
 {
-  "type": "ready",
+  "type": "health",
   "code": 200,
-  "msg": "success",
+  "msg": "OK",
   "data": {
     "ready": true
   }
 }
 ```
 
-#### compute
+#### trans
 
 Translate text.
 
@@ -605,7 +365,7 @@ Translate text.
 
 ```json
 {
-  "type": "compute",
+  "type": "trans",
   "data": {
     "text": "Text to translate",
     "html": false
@@ -617,16 +377,44 @@ Translate text.
 
 ```json
 {
-  "type": "compute",
+  "type": "trans",
   "code": 200,
-  "msg": "success",
+  "msg": "OK",
   "data": {
     "translated_text": "Translated text"
   }
 }
 ```
 
-**Error Codes**: Same as HTTP/gRPC compute errors (1200-1209)
+**Error Codes**: 400, 500, 503
+
+#### exit
+
+Shut down the server.
+
+**Client Message**:
+
+```json
+{
+  "type": "exit",
+  "data": {
+    "time": 0, // Optional, default: 0
+    "force": false // Optional, default: false
+  }
+}
+```
+
+**Server Response**:
+
+```json
+{
+  "type": "exit",
+  "code": 200,
+  "msg": "Shutdown initiated"
+}
+```
+
+**Note**: The WebSocket connection is closed after exit response.
 
 ### Unknown Message Type
 
@@ -637,7 +425,7 @@ If an unknown message type is sent:
 ```json
 {
   "type": "unknown_type",
-  "code": 1009,
+  "code": 400,
   "msg": "Unknown message type: unknown_type"
 }
 ```
@@ -651,9 +439,12 @@ The worker service can be configured using environment variables:
 | Variable      | Default   | Description                                          |
 | ------------- | --------- | ---------------------------------------------------- |
 | `LOG_LEVEL`   | `info`    | Logging level (debug, info, warn, error)             |
-| `WORK_DIR`    | `./`      | Working directory for relative model paths           |
+| `MODEL_DIR`   | `./`      | Model directory for auto-loading on startup          |
+| `MODEL_PATH`  | (empty)   | Model file path for auto-loading                     |
+| `LEXICAL_SHORTLIST_PATH` | (empty) | Lexical shortlist file path for auto-loading |
 | `SERVER_HOST` | `0.0.0.0` | Server host address (shared by all enabled services) |
 | `SERVER_PORT` | `8988`    | Server port (shared by all enabled services)         |
+| `MAX_LENGTH_BREAK` | `128` | Maximum sentence length before breaking          |
 
 ### Service Control
 
@@ -676,6 +467,21 @@ For better local performance, gRPC can also listen on a Unix domain socket:
 When enabled, gRPC will listen on both TCP and Unix socket simultaneously. Unix domain sockets provide 20-40% better performance for local IPC by avoiding TCP/IP stack overhead.
 
 ### Example Configuration
+
+Engine auto-loading with model directory:
+
+```bash
+export MODEL_DIR=./models/enzh
+./worker
+```
+
+Engine auto-loading with individual file paths:
+
+```bash
+export MODEL_PATH=./models/enzh/model.enzh.intgemm.alphas.bin
+export LEXICAL_SHORTLIST_PATH=./models/enzh/lex.50.50.enzh.s2t.bin
+./worker
+```
 
 Disable WebSocket and change server port:
 
@@ -707,51 +513,43 @@ This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 
 ### 1. Basic Translation Flow
 
-1. **Check Health** (optional)
+**Note**: Engine is auto-loaded on startup via `-model-dir` or individual file path parameters. No need to call poweron.
+
+1. **Check Health** (includes ready status)
 
    - gRPC: Call `Health()`
    - HTTP: `GET /health`
-   - WebSocket: Not typically needed
+   - WebSocket: Send `{"type": "health"}`
 
-2. **Load Engine**
-
-   - gRPC: Call `Poweron(path="/path/to/model")`
-   - HTTP: `POST /poweron` with `{"path": "/path/to/model"}`
-   - WebSocket: Send `{"type": "poweron", "data": {"path": "/path/to/model"}}`
-
-3. **Check Ready** (optional)
-
-   - gRPC: Call `Ready()`
-   - HTTP: `GET /ready`
-   - WebSocket: Send `{"type": "ready"}`
-
-4. **Translate**
-   - gRPC: Call `Compute(text="Hello", html=false)`
-   - HTTP: `POST /compute` with `{"text": "Hello", "html": false}`
-   - WebSocket: Send `{"type": "compute", "data": {"text": "Hello", "html": false}}`
+2. **Translate**
+   - gRPC: Call `Trans(text="Hello", html=false)`
+   - HTTP: `POST /trans` with `{"text": "Hello", "html": false}`
+   - WebSocket: Send `{"type": "trans", "data": {"text": "Hello", "html": false}}`
 
 ### 2. Batch Translation (gRPC Stream)
 
-1. Open `ComputeStream` connection
-2. Send multiple `ComputeRequest` messages
-3. Receive corresponding `ComputeResponse` for each request
+1. Open `TransStream` connection
+2. Send multiple `TransRequest` messages
+3. Receive corresponding `TransResponse` for each request
 4. Close stream when done
 
 ### 3. Graceful Shutdown
 
 1. **Wait for completion**:
 
-   - Call `Poweroff(time=5, force=false)` to wait 5 seconds + up to 30 seconds for active tasks
+   - Call `Exit(time=5, force=false)` to wait 5 seconds + up to 30 seconds for active tasks
 
 2. **Force shutdown**:
-   - Call `Poweroff(time=0, force=true)` for immediate shutdown
+   - Call `Exit(time=0, force=true)` for immediate shutdown
 
 ## Notes
 
+- Engine is auto-loaded on startup via configuration parameters
 - All three protocols share the same translation engine instance
 - Model files must include: `model.*.intgemm.alphas.bin`, `lex.*.s2t.bin`, `vocab.*.spm`
-- Paths can be absolute or relative to the configured `WORK_DIR`
+- Paths can be absolute or relative to the configured `MODEL_DIR`
 - The service handles concurrent requests through an internal queue for HTTP and WebSocket
-- gRPC `ComputeStream` is optimized for batch processing
-- Empty text in compute requests returns empty translation with success code
+- gRPC `TransStream` is optimized for batch processing
+- Empty text in trans requests returns empty translation with success code
 - All servers can be enabled/disabled independently via environment variables
+- Fatal WASM errors are detected automatically and trigger process exit (exit code 1)

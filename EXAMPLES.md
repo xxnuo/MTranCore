@@ -20,8 +20,13 @@ The worker service can be configured using command line arguments, environment v
 # Set log level
 ./worker -log-level debug
 
-# Set working directory
-./worker -work-dir /path/to/models
+# Auto-load model on startup (Option 1: using directory)
+./worker -model-dir /path/to/models/enzh
+
+# Auto-load model on startup (Option 2: using individual files)
+./worker -model-path models/enzh/model.enzh.intgemm.alphas.bin \
+  -lexical-shortlist-path models/enzh/lex.50.50.enzh.s2t.bin \
+  -vocabulary-path models/enzh/vocab.enzh.spm
 
 # Enable gRPC Unix socket
 ./worker -grpc-unix-socket /tmp/mtrancore.sock
@@ -40,7 +45,7 @@ The worker service can be configured using command line arguments, environment v
 export LOG_LEVEL=debug
 export SERVER_HOST=0.0.0.0
 export SERVER_PORT=8988
-export WORK_DIR=./models
+export MODEL_DIR=./models/enzh
 export GRPC_UNIX_SOCKET=/tmp/mtrancore.sock
 export ENABLE_HTTP=true
 export ENABLE_WEBSOCKET=true
@@ -63,13 +68,17 @@ export SERVER_PORT=8988
 | CLI Flag | Environment Variable | Default | Description |
 |----------|---------------------|---------|-------------|
 | `-log-level` | `LOG_LEVEL` | `info` | Log level (debug, info, warn, error) |
-| `-work-dir` | `WORK_DIR` | `./` | Working directory |
+| `-model-dir` | `MODEL_DIR` | `./` | Model directory for auto-loading |
+| `-model-path` | `MODEL_PATH` | (empty) | Model file path |
+| `-lexical-shortlist-path` | `LEXICAL_SHORTLIST_PATH` | (empty) | Lexical shortlist file path |
+| `-vocabulary-path` | (array flag) | (empty) | Vocabulary file path(s) |
 | `-host` | `SERVER_HOST` | `0.0.0.0` | Server host address |
 | `-port` | `SERVER_PORT` | `8988` | Server port |
 | `-grpc-unix-socket` | `GRPC_UNIX_SOCKET` | (empty) | Path to Unix socket file for gRPC |
 | `-enable-http` | `ENABLE_HTTP` | `true` | Enable HTTP server |
 | `-enable-websocket` | `ENABLE_WEBSOCKET` | `true` | Enable WebSocket server |
 | `-enable-grpc` | `ENABLE_GRPC` | `true` | Enable gRPC server |
+| `-max-length-break` | `MAX_LENGTH_BREAK` | `128` | Maximum sentence length before breaking |
 
 ### Help Information
 
@@ -81,148 +90,106 @@ To see all available command line options:
 
 ## HTTP/REST API Examples
 
-### 1. Health Check
+**Note**: Engine is auto-loaded on startup via `-model-dir` or individual file path parameters. No need to call poweron endpoint.
+
+### 1. Health Check (includes ready status)
 
 ```bash
 curl http://localhost:8988/health
 ```
 
-### 2. Load Translation Engine
-
-#### Option 1: Using Model Directory Path
-
-```bash
-curl -X POST http://localhost:8988/poweron \
-  -H "Content-Type: application/json" \
-  -d '{"path": "models/enzh"}'
+Response:
+```json
+{
+  "code": 200,
+  "message": "OK",
+  "data": {
+    "ready": true
+  }
+}
 ```
 
-#### Option 2: Using Individual File Paths
+### 2. Translate Text
 
 ```bash
-# With single vocabulary file
-curl -X POST http://localhost:8988/poweron \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-  }'
-
-# With dual vocabulary files
-curl -X POST http://localhost:8988/poweron \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_paths": [
-      "models/enzh/srcvocab.enzh.spm",
-      "models/enzh/trgvocab.enzh.spm"
-    ]
-  }'
-```
-
-**Note**: Individual file paths take priority over the `path` parameter. You can also combine `vocabulary_path` and `vocabulary_paths` - they will be merged with `vocabulary_path` first.
-
-### 3. Check Ready Status
-
-```bash
-curl http://localhost:8988/ready
-```
-
-### 4. Translate Text
-
-```bash
-curl -X POST http://localhost:8988/compute \
+curl -X POST http://localhost:8988/trans \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, world!", "html": false}'
 ```
 
-### 5. Shutdown Server
+Success response (text/plain):
+```
+你好,世界!
+```
+
+Error response (application/json):
+```json
+{
+  "code": 503,
+  "message": "Translation engine not ready"
+}
+```
+
+### 3. Shutdown Server
 
 ```bash
 # Graceful Shutdown (wait for requests to complete)
-curl -X POST http://localhost:8988/poweroff \
+curl -X POST http://localhost:8988/exit \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": false}'
 
 # Force Shutdown
-curl -X POST http://localhost:8988/poweroff \
+curl -X POST http://localhost:8988/exit \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": true}'
 ```
 
 ## gRPC API Examples
 
-Use `grpcurl` tool to test gRPC API:
+Use `grpcurl` tool to test gRPC API.
 
-### 1. Health Check
+**Note**: Engine is auto-loaded on startup. No need to call Poweron.
+
+### 1. Health Check (includes ready status)
 
 ```bash
 grpcurl -plaintext localhost:8988 translator.TranslatorService/Health
 ```
 
-### 2. Load Translation Engine
-
-#### Option 1: Using Model Directory Path
-
-```bash
-grpcurl -plaintext -d '{"path": "models/enzh"}' \
-  localhost:8988 translator.TranslatorService/Poweron
+Response:
+```json
+{
+  "code": 200,
+  "message": "OK",
+  "ready": true
+}
 ```
 
-#### Option 2: Using Individual File Paths
-
-```bash
-# With single vocabulary file
-grpcurl -plaintext -d '{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-}' localhost:8988 translator.TranslatorService/Poweron
-
-# With dual vocabulary files
-grpcurl -plaintext -d '{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_paths": [
-    "models/enzh/srcvocab.enzh.spm",
-    "models/enzh/trgvocab.enzh.spm"
-  ]
-}' localhost:8988 translator.TranslatorService/Poweron
-```
-
-### 3. Check Ready Status
-
-```bash
-grpcurl -plaintext localhost:8988 translator.TranslatorService/Ready
-```
-
-### 4. Translate Text
+### 2. Translate Text
 
 ```bash
 grpcurl -plaintext -d '{"text": "Hello, world!", "html": false}' \
-  localhost:8988 translator.TranslatorService/Compute
+  localhost:8988 translator.TranslatorService/Trans
 ```
 
-### 5. Streaming Translation
+### 3. Streaming Translation
 
 ```bash
-grpcurl -plaintext -d @ localhost:8988 translator.TranslatorService/ComputeStream <<EOF
+grpcurl -plaintext -d @ localhost:8988 translator.TranslatorService/TransStream <<EOF
 {"text": "Hello"}
 {"text": "World"}
 {"text": "Goodbye"}
 EOF
 ```
 
-### 6. Shutdown Server
+### 4. Shutdown Server
 
 ```bash
 grpcurl -plaintext -d '{"time": 0, "force": false}' \
-  localhost:8988 translator.TranslatorService/Poweroff
+  localhost:8988 translator.TranslatorService/Exit
 ```
 
-### 7. Using Unix Domain Socket (for better local performance)
+### 5. Using Unix Domain Socket (for better local performance)
 
 Enable gRPC Unix socket (server side):
 
@@ -241,7 +208,7 @@ grpcurl -plaintext -unix /tmp/mtrancore.sock translator.TranslatorService/Health
 # Translate text
 grpcurl -plaintext -unix /tmp/mtrancore.sock \
   -d '{"text": "Hello, world!", "html": false}' \
-  translator.TranslatorService/Compute
+  translator.TranslatorService/Trans
 ```
 
 Use benchmark tool to test Unix socket performance:
@@ -258,6 +225,8 @@ Use benchmark tool to test Unix socket performance:
 
 ## WebSocket API Examples
 
+**Note**: Engine is auto-loaded on startup. No need to send poweron message.
+
 ### Use JavaScript (Browser/Node.js)
 
 ```javascript
@@ -265,53 +234,35 @@ const ws = new WebSocket('ws://localhost:8988/ws');
 
 ws.onopen = () => {
   console.log('Connected');
-  
-  // 1. Load Engine (Option 1: using directory path)
+
+  // 1. Check Health
   ws.send(JSON.stringify({
-    type: 'poweron',
-    data: { path: 'models/enzh' }
+    type: 'health',
+    data: {}
   }));
-  
-  // Alternative: Load Engine (Option 2: using individual file paths)
-  // ws.send(JSON.stringify({
-  //   type: 'poweron',
-  //   data: {
-  //     model_path: 'models/enzh/model.enzh.intgemm.alphas.bin',
-  //     lexical_shortlist_path: 'models/enzh/lex.50.50.enzh.s2t.bin',
-  //     vocabulary_path: 'models/enzh/single_vocab.enzh.spm'
-  //   }
-  // }));
 };
 
 ws.onmessage = (event) => {
   const response = JSON.parse(event.data);
   console.log('Response:', response);
-  
-  if (response.type === 'poweron' && response.code === 0) {
-    // 2. Check Ready Status
+
+  if (response.type === 'health' && response.data.ready) {
+    // 2. Execute Translation
     ws.send(JSON.stringify({
-      type: 'ready',
-      data: {}
-    }));
-  }
-  
-  if (response.type === 'ready' && response.data.ready) {
-    // 3. Execute Translation
-    ws.send(JSON.stringify({
-      type: 'compute',
+      type: 'trans',
       data: {
         text: 'Hello, world!',
         html: false
       }
     }));
   }
-  
-  if (response.type === 'compute' && response.code === 0) {
+
+  if (response.type === 'trans' && response.code === 200) {
     console.log('Translation:', response.data.translated_text);
-    
-    // 4. Close Connection
+
+    // 3. Close Connection
     ws.send(JSON.stringify({
-      type: 'poweroff',
+      type: 'exit',
       data: { time: 0, force: true }
     }));
   }
@@ -336,26 +287,18 @@ import websockets
 async def translate():
     uri = "ws://localhost:8988/ws"
     async with websockets.connect(uri) as websocket:
-        # 1. Load Engine
+        # 1. Check Health
         await websocket.send(json.dumps({
-            "type": "poweron",
-            "data": {"path": "models/enzh"}
-        }))
-        response = json.loads(await websocket.recv())
-        print("Poweron response:", response)
-        
-        # 2. Check Ready Status
-        await websocket.send(json.dumps({
-            "type": "ready",
+            "type": "health",
             "data": {}
         }))
         response = json.loads(await websocket.recv())
-        print("Ready response:", response)
-        
-        # 3. Execute Translation
+        print("Health response:", response)
+
+        # 2. Execute Translation
         if response.get("data", {}).get("ready"):
             await websocket.send(json.dumps({
-                "type": "compute",
+                "type": "trans",
                 "data": {
                     "text": "Hello, world!",
                     "html": False
@@ -363,10 +306,10 @@ async def translate():
             }))
             response = json.loads(await websocket.recv())
             print("Translation:", response.get("data", {}).get("translated_text"))
-        
-        # 4. Close Connection
+
+        # 3. Close Connection
         await websocket.send(json.dumps({
-            "type": "poweroff",
+            "type": "exit",
             "data": {"time": 0, "force": True}
         }))
 
@@ -381,54 +324,52 @@ wscat -c ws://localhost:8988/ws
 
 # Send messages after connection:
 
-# 1. Load Engine
-> {"type":"poweron","data":{"path":"models/enzh"}}
+# 1. Check Health
+> {"type":"health","data":{}}
 
-# 2. Check Ready Status
-> {"type":"ready","data":{}}
+# 2. Translate Text
+> {"type":"trans","data":{"text":"Hello, world!","html":false}}
 
-# 3. Translate Text
-> {"type":"compute","data":{"text":"Hello, world!","html":false}}
-
-# 4. Shutdown Server
-> {"type":"poweroff","data":{"time":0,"force":true}}
+# 3. Shutdown Server
+> {"type":"exit","data":{"time":0,"force":true}}
 ```
 
 ## Error Handling
 
-All protocols use the same error code system. The `code` field in the response indicates the operation result:
+All protocols use simplified HTTP-standard error codes:
 
-- `0`: Success
-- `1000-1099`: Poweron related errors
-- `1100-1199`: Poweroff related errors  
-- `1200-1299`: Compute related errors
-
-Detailed error code list please refer to [REFERENCE.md](REFERENCE.md#error-codes).
+| Code | Description |
+|------|-------------|
+| 200  | Success |
+| 400  | Invalid parameters |
+| 500  | Translation failure |
+| 502  | Internal error |
+| 503  | Engine not ready |
 
 ### Error Response Examples
 
 #### HTTP
 ```json
 {
-  "code": 1001,
-  "message": "path does not exist: /invalid/path"
+  "code": 400,
+  "message": "text is required"
 }
 ```
 
 #### gRPC
 ```json
 {
-  "code": 1200,
-  "message": "Engine is not ready. Please call poweron first"
+  "code": 503,
+  "message": "Translation engine not ready"
 }
 ```
 
 #### WebSocket
 ```json
 {
-  "type": "compute",
-  "code": 1201,
-  "msg": "Translation failed: context deadline exceeded"
+  "type": "trans",
+  "code": 500,
+  "msg": "Translation failed: WASM module error"
 }
 ```
 
@@ -439,40 +380,28 @@ Detailed error code list please refer to [REFERENCE.md](REFERENCE.md#error-codes
 ```bash
 #!/bin/bash
 
-# 1. Check Server Health Status
-curl http://localhost:8988/health
+# Engine is auto-loaded on startup, no need to call poweron
 
-# 2. Load Translation Model
-curl -X POST http://localhost:8988/poweron \
-  -H "Content-Type: application/json" \
-  -d '{"path": "models/enzh"}'
+# 1. Check Server Health and Ready Status
+health=$(curl -s http://localhost:8988/health)
+echo "Health: $health"
 
-# 3. Wait for Model Loading
-while true; do
-  ready=$(curl -s http://localhost:8988/ready | jq -r '.data.ready')
-  if [ "$ready" = "true" ]; then
-    echo "Engine is ready"
-    break
-  fi
-  echo "Waiting for engine..."
-  sleep 1
-done
+ready=$(echo $health | jq -r '.data.ready')
+if [ "$ready" = "true" ]; then
+  # 2. Execute Translation (returns plain text directly)
+  result=$(curl -s -X POST http://localhost:8988/trans \
+    -H "Content-Type: application/json" \
+    -d '{"text": "Hello, world!", "html": false}')
 
-# 4. Execute Translation
-result=$(curl -s -X POST http://localhost:8988/compute \
-  -H "Content-Type: application/json" \
-  -d '{"text": "Hello, world!", "html": false}')
+  echo "Translation result: $result"
 
-echo "Translation result: $result"
-
-# 5. Extract Translated Text
-translated=$(echo $result | jq -r '.data.translated_text')
-echo "Translated text: $translated"
-
-# 6. Graceful Shutdown Server
-curl -X POST http://localhost:8988/poweroff \
-  -H "Content-Type: application/json" \
-  -d '{"time": 5, "force": false}'
+  # 3. Graceful Shutdown Server
+  curl -X POST http://localhost:8988/exit \
+    -H "Content-Type: application/json" \
+    -d '{"time": 5, "force": false}'
+else
+  echo "Engine not ready"
+fi
 ```
 
 ## More Information
