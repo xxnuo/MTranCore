@@ -271,15 +271,51 @@ func main() {
 		}
 	}()
 
-	// logger.Info("==============================================")
 	if len(enabledServices) > 0 {
 		logger.Info("Enabled services: %s", strings.Join(enabledServices, ", "))
 		logger.Info("All services running on port %s", cfg.ServerPort)
 	} else {
 		logger.Warn("No services enabled!")
 	}
+
+	var engineManager *EngineManager
+	if grpcService != nil {
+		engineManager = grpcService.engineManager
+	} else if unifiedServer != nil {
+		engineManager = unifiedServer.engineManager
+	}
+
+	if engineManager != nil {
+		shouldAutoPoweron := false
+		poweronReq := PoweronRequest{}
+
+		if cfg.ModelPath != "" {
+			shouldAutoPoweron = true
+			poweronReq.ModelPath = cfg.ModelPath
+			poweronReq.LexicalShortlistPath = cfg.LexicalShortlistPath
+			poweronReq.VocabularyPaths = cfg.VocabularyPaths
+		} else if cfg.ModelDir != "" {
+			shouldAutoPoweron = true
+			poweronReq.Path = "."
+		}
+
+		if shouldAutoPoweron {
+			logger.Info("Auto-loading translation engine...")
+			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+				defer cancel()
+
+				result := engineManager.PoweronWithRequest(ctx, poweronReq)
+				if result.Success {
+					logger.Info("Translation engine loaded successfully")
+				} else {
+					logger.Error("Failed to auto-load translation engine: %s", result.ErrorMessage)
+				}
+			}()
+		}
+	}
+
 	logger.Info("Press Ctrl+C to shutdown gracefully")
-	// logger.Info("==============================================")
 
 	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
