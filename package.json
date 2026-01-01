@@ -1,0 +1,37 @@
+{
+  "name": "mtrancore",
+  "version": "1.0.0",
+  "description": "Core translation library for MTran using Bergamot WASM",
+  "main": "dist/index.node.js",
+  "exports": {
+    ".": {
+      "node": "./dist/index.node.js",
+      "browser": "./dist/index.web.js",
+      "default": "./dist/index.web.js"
+    }
+  },
+  "types": "dist/index.node.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc && npm run copy-assets",
+    "copy-assets": "mkdir -p dist/lib/bergamot dist/lib/cld2 && cp -r src/lib/bergamot/* dist/lib/bergamot/ && cp -r src/lib/cld2/* dist/lib/cld2/",
+    "test": "node examples/basic.js",
+    "example:node": "cd examples/node && npm install && node index.js",
+    "example:web": "cd examples/web && bun install && bun run dev"
+  },
+  "keywords": [
+    "translation",
+    "bergamot",
+    "wasm",
+    "offline"
+  ],
+  "author": "xxnuo",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "fzstd": "^0.1.1"
+  }
+}

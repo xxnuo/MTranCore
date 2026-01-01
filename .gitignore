@@ -1,0 +1,7 @@
+dist/
+node_modules/
+examples/node/models/
+examples/web/node_modules/
+examples/web/dist/
+.DS_Store
+models_test/
