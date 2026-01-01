@@ -37,12 +37,12 @@ The service uses standardized error codes across all protocols:
 | 1002 | `CodePoweronIncompleteFiles` | Model files are incomplete or missing      |
 | 1003 | `CodePoweronInternalError`   | Internal error during poweron              |
 | 1009 | `CodePoweronUnknownError`    | Unknown poweron error                      |
-| 1100 | `CodePoweroffInvalidParams`  | Invalid parameters for exit request    |
-| 1101 | `CodePoweroffWaitingTask`    | Server is shutting down, waiting for tasks |
-| 1109 | `CodePoweroffInternalError`  | Internal error during exit             |
-| 1200 | `CodeComputeInvalidParams`   | Invalid parameters for trans request     |
-| 1201 | `CodeComputeFailure`         | Translation computation failed             |
-| 1209 | `CodeComputeInternalError`   | Internal error during trans              |
+| 1100 | `CodeExitInvalidParams`  | Invalid parameters for exit request    |
+| 1101 | `CodeExitWaitingTask`    | Server is shutting down, waiting for tasks |
+| 1109 | `CodeExitInternalError`  | Internal error during exit             |
+| 1200 | `CodeTransInvalidParams`   | Invalid parameters for trans request     |
+| 1201 | `CodeTransFailure`         | Translation computation failed             |
+| 1209 | `CodeTransInternalError`   | Internal error during trans              |
 
 ## gRPC Protocol
 

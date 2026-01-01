@@ -2,4 +2,4 @@ third_party/
 build/
 dist/
 models
-worker
+/worker
