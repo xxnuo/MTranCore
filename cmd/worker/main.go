@@ -127,11 +127,6 @@ func main() {
 		pb.RegisterTranslatorServiceServer(grpcServerInstance, grpcService)
 		reflection.Register(grpcServerInstance)
 
-		// Link gRPC service with unified server for shared state
-		if unifiedServer != nil {
-			unifiedServer.SetGRPCService(grpcService)
-		}
-
 		enabledServices = append(enabledServices, "gRPC")
 
 		wg.Add(1)
@@ -139,13 +134,10 @@ func main() {
 			defer wg.Done()
 			logger.Info("[gRPC] Starting server on %s", addr)
 			logger.Debug("[gRPC] Service: TranslatorService")
-			logger.Debug("  - Health")
-			logger.Debug("  - Poweron")
-			logger.Debug("  - Poweroff")
-			logger.Debug("  - Reboot")
 			logger.Debug("  - Ready")
 			logger.Debug("  - Compute")
 			logger.Debug("  - ComputeStream")
+			logger.Debug("  - Poweroff")
 
 			if err := grpcServerInstance.Serve(grpcListener); err != nil {
 				if isClosedConnectionError(err) {
@@ -201,22 +193,16 @@ func main() {
 			if cfg.EnableHTTP {
 				logger.Info("[HTTP] Starting server on %s", addr)
 				logger.Debug("[HTTP] Available endpoints:")
-				logger.Debug("  GET  /health   - Health check")
-				logger.Debug("  POST /poweron  - Load translation engine")
-				logger.Debug("  POST /poweroff - Shutdown server")
-				logger.Debug("  POST /reboot   - Reload translation engine")
 				logger.Debug("  GET  /ready    - Check engine status")
 				logger.Debug("  POST /compute  - Translate text")
+				logger.Debug("  POST /poweroff - Shutdown server")
 			}
 			if cfg.EnableWebSocket {
 				logger.Info("[WebSocket] Starting server on %s", addr)
 				logger.Debug("[WebSocket] Available at /ws")
 				logger.Debug("[WebSocket] Message types:")
-				logger.Debug("  - poweron  - Load translation engine")
-				logger.Debug("  - poweroff - Shutdown server")
-				logger.Debug("  - reboot   - Reload translation engine")
-				logger.Debug("  - ready    - Check engine status")
 				logger.Debug("  - compute  - Translate text")
+				logger.Debug("  - poweroff - Shutdown server")
 			}
 
 			// Use the HTTP listener from cmux

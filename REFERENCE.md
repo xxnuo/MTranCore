@@ -13,13 +13,17 @@ This document provides a comprehensive reference for all communication protocols
 
 ## Overview
 
-The MTranCore Worker service provides translation capabilities through three different protocols:
+MTranCore Worker 是一个翻译服务,通过三种协议提供翻译能力:
 
-- **gRPC**: High-performance RPC protocol with streaming support
-- **HTTP**: RESTful API using JSON
-- **WebSocket**: Real-time bidirectional communication
+- **gRPC**: 高性能 RPC 协议,支持流式传输
+- **HTTP**: RESTful API,使用 JSON
+- **WebSocket**: 实时双向通信
 
-All protocols share the same business logic and error codes, providing consistent behavior across different communication methods.
+**重要**:
+- Worker 在启动时会自动加载模型(需要通过环境变量或命令行参数指定模型路径)
+- 所有协议共享相同的翻译引擎实例
+- 翻译失败或引擎未就绪时,Worker 会自动退出
+- 简化的 API 仅保留核心功能:翻译(Compute/ComputeStream)、状态检查(Ready)、关闭(Poweroff)
 
 ## Error Codes
 
@@ -56,70 +60,89 @@ The gRPC service is defined in `worker.proto`:
 
 ```proto
 service TranslatorService {
-  rpc Health(HealthRequest) returns (HealthResponse);
-  rpc Poweron(PoweronRequest) returns (PoweronResponse);
-  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
   rpc Ready(ReadyRequest) returns (ReadyResponse);
   rpc Compute(ComputeRequest) returns (ComputeResponse);
   rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
+  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
 }
 ```
 
 ### Methods
 
-#### Health
+#### Ready
 
-Check server health status.
+检查翻译引擎是否就绪。
 
-**Request**: `HealthRequest` (empty)
+**Request**: `ReadyRequest` (empty)
 
-**Response**: `HealthResponse`
+**Response**: `ReadyResponse`
 
 ```proto
-message HealthResponse {
-  int32 code = 1;      // Always 0 for healthy server
+message ReadyResponse {
+  int32 code = 1;      // Always 200
   string message = 2;  // "OK"
+  bool ready = 3;      // true if engine is loaded
 }
 ```
 
-#### Poweron
+#### Compute
 
-Load the translation engine with model files.
+翻译单个文本。翻译失败时 Worker 会自动退出。
 
-**Request**: `PoweronRequest`
+**Request**: `ComputeRequest`
 
 ```proto
-message PoweronRequest {
-  string path = 1;                            // Path to model directory (optional if individual paths provided)
-  string model_path = 2;                      // Path to model file (optional, takes priority over path)
-  string lexical_shortlist_path = 3;          // Path to lexical shortlist file (optional, takes priority over path)
-  string vocabulary_path = 4;                 // Path to vocabulary file (optional, merged with vocabulary_paths)
-  repeated string vocabulary_paths = 5;       // Paths to vocabulary files (optional, merged with vocabulary_path)
+message ComputeRequest {
+  string text = 1;  // Text to translate (required)
+  bool html = 2;    // Whether to treat input as HTML (default: false)
 }
 ```
 
-**Response**: `PoweronResponse`
+**Response**: `ComputeResponse`
 
 ```proto
-message PoweronResponse {
-  int32 code = 1;      // 0 on success, error code otherwise
-  string message = 2;  // Description of the result
+message ComputeResponse {
+  int32 code = 1;             // 200 on success
+  string message = 2;         // "OK"
+  string translated_text = 3; // Translated text
 }
 ```
-
-**Parameter Priority**:
-
-Individual file paths take priority over `path`. When any of `model_path`, `lexical_shortlist_path`, `vocabulary_path`, or `vocabulary_paths` is provided:
-- `model_path` and `lexical_shortlist_path` are required
-- `vocabulary_path` and `vocabulary_paths` are merged (vocabulary_path first)
-- All paths can be absolute or relative to work_dir
 
 **Error Codes**:
 
-- `1000`: Path is required or individual file paths are incomplete
-- `1001`: Path does not exist
-- `1002`: Model files are incomplete
-- `1003`: Internal error loading engine
+- `1200`: Text is required
+- Worker 会在翻译失败或引擎未就绪时自动退出
+
+#### ComputeStream
+
+使用双向流翻译多个文本。翻译失败时 Worker 会自动退出。
+
+**Request Stream**: `ComputeRequest`
+
+```proto
+message ComputeRequest {
+  string text = 1;  // Text to translate
+  bool html = 2;    // Whether to treat input as HTML
+}
+```
+
+**Response Stream**: `ComputeResponse`
+
+```proto
+message ComputeResponse {
+  int32 code = 1;             // 200 on success
+  string message = 2;         // "OK"
+  string translated_text = 3; // Translated text
+}
+```
+
+**Behavior**:
+
+- Client sends multiple `ComputeRequest` messages
+- Server responds with corresponding `ComputeResponse` for each request
+- Client closes stream by sending EOF
+- Empty text returns empty translation with success code
+- Worker 会在翻译失败或引擎未就绪时自动退出
 
 #### Poweroff
 
@@ -138,7 +161,7 @@ message PoweroffRequest {
 
 ```proto
 message PoweroffResponse {
-  int32 code = 1;      // 0 on success, error code otherwise
+  int32 code = 1;      // 200 on success, error code otherwise
   string message = 2;  // Description of shutdown status
 }
 ```
@@ -152,81 +175,6 @@ message PoweroffResponse {
 
 - If `force=true`: Immediate shutdown
 - If `force=false`: Waits up to 30 seconds for active streams, then forces shutdown
-
-#### Ready
-
-Check if the translation engine is loaded and ready.
-
-**Request**: `ReadyRequest` (empty)
-
-**Response**: `ReadyResponse`
-
-```proto
-message ReadyResponse {
-  int32 code = 1;      // Always 0
-  string message = 2;  // "OK"
-  bool ready = 3;      // true if engine is loaded
-}
-```
-
-#### Compute
-
-Translate a single text.
-
-**Request**: `ComputeRequest`
-
-```proto
-message ComputeRequest {
-  string text = 1;  // Text to translate (required)
-  bool html = 2;    // Whether to treat input as HTML (default: false)
-}
-```
-
-**Response**: `ComputeResponse`
-
-```proto
-message ComputeResponse {
-  int32 code = 1;             // 0 on success, error code otherwise
-  string message = 2;         // Description of the result
-  string translated_text = 3; // Translated text (on success)
-}
-```
-
-**Error Codes**:
-
-- `1200`: Text is required or engine not ready
-- `1201`: Translation failed
-- `1209`: Server is shutting down
-
-#### ComputeStream
-
-Translate multiple texts using bidirectional streaming.
-
-**Request Stream**: `ComputeRequest`
-
-```proto
-message ComputeRequest {
-  string text = 1;  // Text to translate
-  bool html = 2;    // Whether to treat input as HTML
-}
-```
-
-**Response Stream**: `ComputeResponse`
-
-```proto
-message ComputeResponse {
-  int32 code = 1;             // 0 on success, error code otherwise
-  string message = 2;         // Description of the result
-  string translated_text = 3; // Translated text (on success)
-}
-```
-
-**Behavior**:
-
-- Client sends multiple `ComputeRequest` messages
-- Server responds with corresponding `ComputeResponse` for each request
-- Client closes stream by sending EOF
-- Empty text returns empty translation with success code
 
 ## HTTP Protocol
 
@@ -260,51 +208,9 @@ Error responses:
 
 ### Endpoints
 
-#### GET /health
+#### GET /ready
 
-Check server health status.
-
-**Response**: HTTP 200
-
-```json
-(empty body with status OK)
-```
-
-#### POST /poweron
-
-Load the translation engine with model files.
-
-**Request Body**:
-
-Option 1: Using model directory path
-```json
-{
-  "path": "path/to/model" // Absolute or relative to work_dir
-}
-```
-
-Option 2: Using individual file paths (takes priority over path)
-```json
-{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-}
-```
-
-Option 3: Using individual file paths with dual vocabularies
-```json
-{
-  "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-  "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-  "vocabulary_paths": [
-    "models/enzh/srcvocab.enzh.spm",
-    "models/enzh/trgvocab.enzh.spm"
-  ]
-}
-```
-
-**Note**: `vocabulary_path` and `vocabulary_paths` can be used together and will be merged (vocabulary_path first).
+检查翻译引擎是否就绪。
 
 **Success Response**: HTTP 200
 
@@ -312,41 +218,40 @@ Option 3: Using individual file paths with dual vocabularies
 {
   "code": 200,
   "data": {
-    "message": "Engine loaded successfully"
+    "ready": true // or false
   }
 }
 ```
+
+#### POST /compute
+
+翻译文本。翻译失败时 Worker 会自动退出。
+
+**Request Body**:
+
+```json
+{
+  "text": "Text to translate", // Required
+  "html": false // Optional, default: false
+}
+```
+
+**Success Response**: HTTP 200
+
+Content-Type: `text/plain; charset=utf-8`
+
+Returns the translated text directly as plain text (not JSON).
 
 **Error Responses**:
 
 - HTTP 400 (Invalid parameters):
   ```json
   {
-    "code": 1000,
-    "message": "path is required" // or "model_path is required when using individual file paths"
+    "code": 1200,
+    "message": "text is required"
   }
   ```
-- HTTP 404 (Path not found):
-  ```json
-  {
-    "code": 1001,
-    "message": "path does not exist: /full/path"
-  }
-  ```
-- HTTP 400 (Incomplete files):
-  ```json
-  {
-    "code": 1002,
-    "message": "Missing required model files"
-  }
-  ```
-- HTTP 500 (Internal error):
-  ```json
-  {
-    "code": 1003,
-    "message": "Internal error message"
-  }
-  ```
+- Worker 会在翻译失败或引擎未就绪时自动退出
 
 #### POST /poweroff
 
@@ -380,71 +285,6 @@ Shut down the server gracefully or forcefully.
   "message": "Server is shutting down, waiting for requests to complete"
 }
 ```
-
-#### GET /ready
-
-Check if the translation engine is loaded and ready.
-
-**Success Response**: HTTP 200
-
-```json
-{
-  "code": 200,
-  "data": {
-    "ready": true // or false
-  }
-}
-```
-
-#### POST /compute
-
-Translate text.
-
-**Request Body**:
-
-```json
-{
-  "text": "Text to translate", // Required
-  "html": false // Optional, default: false
-}
-```
-
-**Success Response**: HTTP 200
-
-Content-Type: `text/plain; charset=utf-8`
-
-Returns the translated text directly as plain text (not JSON).
-
-**Error Responses**:
-
-- HTTP 400 (Invalid parameters):
-  ```json
-  {
-    "code": 1200,
-    "message": "text is required"
-  }
-  ```
-- HTTP 503 (Engine not ready):
-  ```json
-  {
-    "code": 1200,
-    "message": "Engine is not ready. Please call poweron first"
-  }
-  ```
-- HTTP 503 (Server shutting down):
-  ```json
-  {
-    "code": 1209,
-    "message": "Server is shutting down"
-  }
-  ```
-- HTTP 500 (Translation failed):
-  ```json
-  {
-    "code": 1201,
-    "message": "Translation failed: error details"
-  }
-  ```
 
 ## WebSocket Protocol
 
@@ -482,45 +322,18 @@ All messages are JSON objects with the following structure:
 
 ### Message Types
 
-#### poweron
+#### compute
 
-Load the translation engine with model files.
+翻译文本。翻译失败时 Worker 会自动退出。
 
 **Client Message**:
 
-Option 1: Using model directory path
 ```json
 {
-  "type": "poweron",
+  "type": "compute",
   "data": {
-    "path": "path/to/model"
-  }
-}
-```
-
-Option 2: Using individual file paths (takes priority over path)
-```json
-{
-  "type": "poweron",
-  "data": {
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-  }
-}
-```
-
-Option 3: Using individual file paths with dual vocabularies
-```json
-{
-  "type": "poweron",
-  "data": {
-    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-    "vocabulary_paths": [
-      "models/enzh/srcvocab.enzh.spm",
-      "models/enzh/trgvocab.enzh.spm"
-    ]
+    "text": "Text to translate",
+    "html": false
   }
 }
 ```
@@ -529,16 +342,18 @@ Option 3: Using individual file paths with dual vocabularies
 
 ```json
 {
-  "type": "poweron",
+  "type": "compute",
   "code": 200,
   "msg": "success",
   "data": {
-    "message": "Engine loaded successfully"
+    "translated_text": "Translated text"
   }
 }
 ```
 
-**Error Codes**: Same as HTTP/gRPC poweron errors (1000-1009)
+**Error Codes**:
+- `1200`: text is required
+- Worker 会在翻译失败或引擎未就绪时自动退出
 
 #### poweroff
 
@@ -571,63 +386,6 @@ Shut down the server.
 
 **Note**: The WebSocket connection is closed after poweroff response.
 
-#### ready
-
-Check if the translation engine is loaded.
-
-**Client Message**:
-
-```json
-{
-  "type": "ready",
-  "data": {}
-}
-```
-
-**Server Response**:
-
-```json
-{
-  "type": "ready",
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "ready": true
-  }
-}
-```
-
-#### compute
-
-Translate text.
-
-**Client Message**:
-
-```json
-{
-  "type": "compute",
-  "data": {
-    "text": "Text to translate",
-    "html": false
-  }
-}
-```
-
-**Server Response**:
-
-```json
-{
-  "type": "compute",
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "translated_text": "Translated text"
-  }
-}
-```
-
-**Error Codes**: Same as HTTP/gRPC compute errors (1200-1209)
-
 ### Unknown Message Type
 
 If an unknown message type is sent:
@@ -644,7 +402,42 @@ If an unknown message type is sent:
 
 ## Configuration
 
-The worker service can be configured using environment variables:
+The worker service can be configured using environment variables or command-line flags:
+
+### Required: Model Configuration
+
+You **must** configure the model path for auto-loading on startup using one of these methods:
+
+**Environment Variables**:
+```bash
+# Option 1: Model directory
+export MODEL_PATH=/path/to/model
+
+# Option 2: Individual files
+export MODEL_FILE=/path/to/model.bin
+export SHORTLIST_FILE=/path/to/lex.bin
+export VOCAB_FILE=/path/to/vocab.spm  # Single vocabulary
+# OR
+export VOCAB_FILES=/path/to/src.spm,/path/to/trg.spm  # Dual vocabularies
+```
+
+**Command-line Flags**:
+```bash
+# Option 1: Model directory
+./worker --model-path=/path/to/model
+
+# Option 2: Individual files
+./worker \
+  --model-file=/path/to/model.bin \
+  --shortlist-file=/path/to/lex.bin \
+  --vocab-file=/path/to/vocab.spm
+
+# OR with dual vocabularies
+./worker \
+  --model-file=/path/to/model.bin \
+  --shortlist-file=/path/to/lex.bin \
+  --vocab-files=/path/to/src.spm,/path/to/trg.spm
+```
 
 ### General Settings
 
@@ -705,42 +498,29 @@ This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 
 ## Common Workflows
 
-### 1. Basic Translation Flow
+### Basic Translation Flow
 
-1. **Check Health** (optional)
+**Note**: Worker auto-loads the model on startup, so no manual poweron is needed.
 
-   - gRPC: Call `Health()`
-   - HTTP: `GET /health`
-   - WebSocket: Not typically needed
-
-2. **Load Engine**
-
-   - gRPC: Call `Poweron(path="/path/to/model")`
-   - HTTP: `POST /poweron` with `{"path": "/path/to/model"}`
-   - WebSocket: Send `{"type": "poweron", "data": {"path": "/path/to/model"}}`
-
-3. **Check Ready** (optional)
-
+1. **Check Ready** (optional)
    - gRPC: Call `Ready()`
    - HTTP: `GET /ready`
-   - WebSocket: Send `{"type": "ready"}`
 
-4. **Translate**
+2. **Translate**
    - gRPC: Call `Compute(text="Hello", html=false)`
    - HTTP: `POST /compute` with `{"text": "Hello", "html": false}`
    - WebSocket: Send `{"type": "compute", "data": {"text": "Hello", "html": false}}`
 
-### 2. Batch Translation (gRPC Stream)
+### Batch Translation (gRPC Stream)
 
 1. Open `ComputeStream` connection
 2. Send multiple `ComputeRequest` messages
 3. Receive corresponding `ComputeResponse` for each request
 4. Close stream when done
 
-### 3. Graceful Shutdown
+### Graceful Shutdown
 
 1. **Wait for completion**:
-
    - Call `Poweroff(time=5, force=false)` to wait 5 seconds + up to 30 seconds for active tasks
 
 2. **Force shutdown**:
@@ -748,10 +528,11 @@ This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 
 ## Notes
 
+- Worker auto-loads the model on startup (requires model path configuration)
+- Translation failures cause Worker to exit automatically
 - All three protocols share the same translation engine instance
-- Model files must include: `model.*.intgemm.alphas.bin`, `lex.*.s2t.bin`, `vocab.*.spm`
 - Paths can be absolute or relative to the configured `WORK_DIR`
-- The service handles concurrent requests through an internal queue for HTTP and WebSocket
+- The service handles concurrent requests through an internal queue
 - gRPC `ComputeStream` is optimized for batch processing
 - Empty text in compute requests returns empty translation with success code
 - All servers can be enabled/disabled independently via environment variables
