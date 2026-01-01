@@ -16,21 +16,23 @@ const (
 	CodePoweronInternalError   ErrorCode = 1003
 	CodePoweronUnknownError    ErrorCode = 1009
 
-	// Poweroff error codes (1100-1199)
-	CodePoweroffInvalidParams ErrorCode = 1100
-	CodePoweroffWaitingTask   ErrorCode = 1101
-	CodePoweroffInternalError ErrorCode = 1109
+	                // Exit error codes (1100-1199)
 
-	// Reboot error codes (1150-1159)
-	CodeRebootInvalidParams ErrorCode = 1150
-	CodeRebootInternalError ErrorCode = 1151
-	CodeRebootWaitingTask   ErrorCode = 1152
+	                CodeExitInvalidParams ErrorCode = 1100
 
-	// Compute error codes (1200-1299)
-	CodeComputeInvalidParams ErrorCode = 1200
-	CodeComputeFailure       ErrorCode = 1201
-	CodeComputeInternalError ErrorCode = 1209
-)
+	                CodeExitWaitingTask   ErrorCode = 1101
+
+	                CodeExitInternalError ErrorCode = 1109
+
+	        
+
+	                // Trans error codes (1200-1299)
+
+	                CodeTransInvalidParams ErrorCode = 1200
+
+	                CodeTransFailure       ErrorCode = 1201
+
+	                CodeTransInternalError ErrorCode = 1209)
 
 // StandardError represents a standard error response
 type StandardError struct {

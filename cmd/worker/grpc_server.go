@@ -39,110 +39,117 @@ func NewGRPCServerWithEngine(cfg *Config, em *EngineManager) *GRPCServer {
 	}
 }
 
-func (g *GRPCServer) Ready(ctx context.Context, req *pb.ReadyRequest) (*pb.ReadyResponse, error) {
+func (g *GRPCServer) Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
 	isReady := g.engineManager.IsReady()
-	return &pb.ReadyResponse{
+	return &pb.HealthResponse{
 		Code:    int32(CodeSuccess),
 		Message: "OK",
-		Ready:   isReady,
+		Health:   isReady,
 	}, nil
 }
 
-func (g *GRPCServer) Poweroff(ctx context.Context, req *pb.PoweroffRequest) (*pb.PoweroffResponse, error) {
-	if req.Time < 0 {
-		return &pb.PoweroffResponse{
-			Code:    int32(CodePoweroffInvalidParams),
-			Message: "time must be non-negative",
-		}, nil
-	}
+func (g *GRPCServer) Exit(ctx context.Context, req *pb.ExitRequest) (*pb.ExitResponse, error) {
+        if req.Time < 0 {
+                return &pb.ExitResponse{
+                        Code:    int32(CodeExitInvalidParams),
+                        Message: "time must be non-negative",
+                }, nil
+        }
 
-	g.isShuttingDown.Store(true)
+        g.isShuttingDown.Store(true)
 
-	go func() {
-		if req.Time > 0 {
-			time.Sleep(time.Duration(req.Time) * time.Second)
-		}
+        go func() {
+                if req.Time > 0 {
+                        time.Sleep(time.Duration(req.Time) * time.Second)
+                }
 
-		if !req.Force {
-			g.engineManager.WaitForIdle(&g.activeStreams, 30*time.Second)
-		}
+                if !req.Force {
+                        g.engineManager.WaitForIdle(&g.activeStreams, 30*time.Second)
+                }
 
-		close(g.shutdownCh)
-	}()
+                close(g.shutdownCh)
+        }()
 
-	if req.Force {
-		return &pb.PoweroffResponse{
-			Code:    int32(CodeSuccess),
-			Message: "Server is shutting down",
-		}, nil
-	}
-	return &pb.PoweroffResponse{
-		Code:    int32(CodePoweroffWaitingTask),
-		Message: "Server is shutting down, waiting for streams to complete",
-	}, nil
+        if req.Force {
+                return &pb.ExitResponse{
+                        Code:    int32(CodeSuccess),
+                        Message: "Server is shutting down",
+                }, nil
+        }
+        return &pb.ExitResponse{
+                Code:    int32(CodeExitWaitingTask),
+                Message: "Server is shutting down, waiting for streams to complete",
+        }, nil
 }
 
-func (g *GRPCServer) Compute(ctx context.Context, req *pb.ComputeRequest) (*pb.ComputeResponse, error) {
-	if g.isShuttingDown.Load() {
-		return &pb.ComputeResponse{
-			Code:    int32(CodeComputeInternalError),
-			Message: "Server is shutting down",
-		}, nil
-	}
+func (g *GRPCServer) Trans(ctx context.Context, req *pb.TransRequest) (*pb.TransResponse, error) {
+        if g.isShuttingDown.Load() {
+                return &pb.TransResponse{
+                        Code:    int32(CodeTransInternalError),
+                        Message: "Server is shutting down",
+                }, nil
+        }
 
-	if req.Text == "" {
-		return &pb.ComputeResponse{
-			Code:    int32(CodeComputeInvalidParams),
-			Message: "text is required",
-		}, nil
-	}
+        if req.Text == "" {
+                return &pb.TransResponse{
+                        Code:    int32(CodeTransInvalidParams),
+                        Message: "text is required",
+                }, nil
+        }
 
-	queue := g.engineManager.GetQueue()
-	if queue == nil || !queue.IsReady() {
-		logger.Fatal("Engine not ready. Worker should auto-load on startup")
-	}
+        queue := g.engineManager.GetQueue()
+        if queue == nil || !queue.IsReady() {
+                logger.Error("Engine not health")
+                return &pb.TransResponse{
+                        Code:    int32(CodeTransInvalidParams),
+                        Message: "Engine not health",
+                }, nil
+        }
 
-	translationReq := engine.TranslationRequest{
-		Text: req.Text,
-		Options: engine.TranslationOptions{
-			HTML: req.Html,
-		},
-	}
+        translationReq := engine.TranslationRequest{
+                Text: req.Text,
+                Options: engine.TranslationOptions{
+                        HTML: req.Html,
+                },
+        }
 
-	translatedText, err := queue.Translate(ctx, translationReq)
-	if err != nil {
-		logger.Fatal("Translation failed: %v", err)
-	}
+        translatedText, err := queue.Translate(ctx, translationReq)
+        if err != nil {
+                logger.Error("Translation failed: %v", err)
+                return &pb.TransResponse{
+                        Code:    int32(CodeTransFailure),
+                        Message: "Translation failed: " + err.Error(),
+                }, nil
+        }
 
-	return &pb.ComputeResponse{
-		Code:           int32(CodeSuccess),
-		Message:        "OK",
-		TranslatedText: translatedText,
-	}, nil
+        return &pb.TransResponse{
+                Code:           int32(CodeSuccess),
+                Message:        "OK",
+                TranslatedText: translatedText,
+        }, nil
 }
 
-func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServer) error {
-	atomic.AddInt32(&g.activeStreams, 1)
-	defer atomic.AddInt32(&g.activeStreams, -1)
+func (g *GRPCServer) TransStream(stream pb.TranslatorService_TransStreamServer) error {
+        atomic.AddInt32(&g.activeStreams, 1)
+        defer atomic.AddInt32(&g.activeStreams, -1)
 
-	for {
-		req, err := stream.Recv()
-		if err == io.EOF {
-			return nil
-		}
-		if err != nil {
-			return status.Errorf(codes.Internal, "failed to receive request: %v", err)
-		}
+        for {
+                req, err := stream.Recv()
+                if err == io.EOF {
+                        return nil
+                }
+                if err != nil {
+                        return status.Errorf(codes.Internal, "failed to receive request: %v", err)
+                }
 
-		if g.isShuttingDown.Load() {
-			return stream.Send(&pb.ComputeResponse{
-				Code:    int32(CodeComputeInternalError),
-				Message: "Server is shutting down",
-			})
-		}
-
+                if g.isShuttingDown.Load() {
+                        return stream.Send(&pb.TransResponse{
+                                Code:    int32(CodeTransInternalError),
+                                Message: "Server is shutting down",
+                        })
+                }
 		if req.Text == "" {
-			if err := stream.Send(&pb.ComputeResponse{
+			if err := stream.Send(&pb.TransResponse{
 				Code:           int32(CodeSuccess),
 				Message:        "OK",
 				TranslatedText: "",
@@ -152,11 +159,14 @@ func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServ
 			continue
 		}
 
-		queue := g.engineManager.GetQueue()
-		if queue == nil || !queue.IsReady() {
-			logger.Fatal("Engine not ready. Worker should auto-load on startup")
-		}
-
+		                queue := g.engineManager.GetQueue()
+		                if queue == nil || !queue.IsReady() {
+		                        logger.Error("Engine not health")
+		                        return stream.Send(&pb.TransResponse{
+		                                Code:    int32(CodeTransInvalidParams),
+		                                Message: "Engine not health",
+		                        })
+		                }
 		translationReq := engine.TranslationRequest{
 			Text: req.Text,
 			Options: engine.TranslationOptions{
@@ -164,13 +174,16 @@ func (g *GRPCServer) ComputeStream(stream pb.TranslatorService_ComputeStreamServ
 			},
 		}
 
-		ctx := stream.Context()
-		translatedText, err := queue.Translate(ctx, translationReq)
-		if err != nil {
-			logger.Fatal("Translation failed: %v", err)
-		}
-
-		if err := stream.Send(&pb.ComputeResponse{
+		                ctx := stream.Context()
+		                translatedText, err := queue.Translate(ctx, translationReq)
+		                if err != nil {
+		                        logger.Error("Translation failed: %v", err)
+		                        return stream.Send(&pb.TransResponse{
+		                                Code:    int32(CodeTransFailure),
+		                                Message: "Translation failed: " + err.Error(),
+		                        })
+		                }
+		if err := stream.Send(&pb.TransResponse{
 			Code:           int32(CodeSuccess),
 			Message:        "OK",
 			TranslatedText: translatedText,

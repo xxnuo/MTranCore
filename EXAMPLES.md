@@ -124,16 +124,16 @@ curl -X POST http://localhost:8988/poweron \
 
 **Note**: Individual file paths take priority over the `path` parameter. You can also combine `vocabulary_path` and `vocabulary_paths` - they will be merged with `vocabulary_path` first.
 
-### 3. Check Ready Status
+### 3. Check Health Status
 
 ```bash
-curl http://localhost:8988/ready
+curl http://localhost:8988/health
 ```
 
 ### 4. Translate Text
 
 ```bash
-curl -X POST http://localhost:8988/compute \
+curl -X POST http://localhost:8988/trans \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, world!", "html": false}'
 ```
@@ -142,12 +142,12 @@ curl -X POST http://localhost:8988/compute \
 
 ```bash
 # Graceful Shutdown (wait for requests to complete)
-curl -X POST http://localhost:8988/poweroff \
+curl -X POST http://localhost:8988/exit \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": false}'
 
 # Force Shutdown
-curl -X POST http://localhost:8988/poweroff \
+curl -X POST http://localhost:8988/exit \
   -H "Content-Type: application/json" \
   -d '{"time": 0, "force": true}'
 ```
@@ -192,23 +192,23 @@ grpcurl -plaintext -d '{
 }' localhost:8988 translator.TranslatorService/Poweron
 ```
 
-### 3. Check Ready Status
+### 3. Check Health Status
 
 ```bash
-grpcurl -plaintext localhost:8988 translator.TranslatorService/Ready
+grpcurl -plaintext localhost:8988 translator.TranslatorService/Health
 ```
 
 ### 4. Translate Text
 
 ```bash
 grpcurl -plaintext -d '{"text": "Hello, world!", "html": false}' \
-  localhost:8988 translator.TranslatorService/Compute
+  localhost:8988 translator.TranslatorService/Trans
 ```
 
 ### 5. Streaming Translation
 
 ```bash
-grpcurl -plaintext -d @ localhost:8988 translator.TranslatorService/ComputeStream <<EOF
+grpcurl -plaintext -d @ localhost:8988 translator.TranslatorService/TransStream <<EOF
 {"text": "Hello"}
 {"text": "World"}
 {"text": "Goodbye"}
@@ -219,7 +219,7 @@ EOF
 
 ```bash
 grpcurl -plaintext -d '{"time": 0, "force": false}' \
-  localhost:8988 translator.TranslatorService/Poweroff
+  localhost:8988 translator.TranslatorService/Exit
 ```
 
 ### 7. Using Unix Domain Socket (for better local performance)
@@ -241,7 +241,7 @@ grpcurl -plaintext -unix /tmp/mtrancore.sock translator.TranslatorService/Health
 # Translate text
 grpcurl -plaintext -unix /tmp/mtrancore.sock \
   -d '{"text": "Hello, world!", "html": false}' \
-  translator.TranslatorService/Compute
+  translator.TranslatorService/Trans
 ```
 
 Use benchmark tool to test Unix socket performance:
@@ -288,17 +288,17 @@ ws.onmessage = (event) => {
   console.log('Response:', response);
   
   if (response.type === 'poweron' && response.code === 0) {
-    // 2. Check Ready Status
+    // 2. Check Health Status
     ws.send(JSON.stringify({
-      type: 'ready',
+      type: 'health',
       data: {}
     }));
   }
   
-  if (response.type === 'ready' && response.data.ready) {
+  if (response.type === 'health' && response.data.health) {
     // 3. Execute Translation
     ws.send(JSON.stringify({
-      type: 'compute',
+      type: 'trans',
       data: {
         text: 'Hello, world!',
         html: false
@@ -306,12 +306,12 @@ ws.onmessage = (event) => {
     }));
   }
   
-  if (response.type === 'compute' && response.code === 0) {
+  if (response.type === 'trans' && response.code === 0) {
     console.log('Translation:', response.data.translated_text);
     
     // 4. Close Connection
     ws.send(JSON.stringify({
-      type: 'poweroff',
+      type: 'exit',
       data: { time: 0, force: true }
     }));
   }
@@ -344,18 +344,18 @@ async def translate():
         response = json.loads(await websocket.recv())
         print("Poweron response:", response)
         
-        # 2. Check Ready Status
+        # 2. Check Health Status
         await websocket.send(json.dumps({
-            "type": "ready",
+            "type": "health",
             "data": {}
         }))
         response = json.loads(await websocket.recv())
-        print("Ready response:", response)
+        print("Health response:", response)
         
         # 3. Execute Translation
-        if response.get("data", {}).get("ready"):
+        if response.get("data", {}).get("health"):
             await websocket.send(json.dumps({
-                "type": "compute",
+                "type": "trans",
                 "data": {
                     "text": "Hello, world!",
                     "html": False
@@ -366,7 +366,7 @@ async def translate():
         
         # 4. Close Connection
         await websocket.send(json.dumps({
-            "type": "poweroff",
+            "type": "exit",
             "data": {"time": 0, "force": True}
         }))
 
@@ -384,14 +384,14 @@ wscat -c ws://localhost:8988/ws
 # 1. Load Engine
 > {"type":"poweron","data":{"path":"models/enzh"}}
 
-# 2. Check Ready Status
-> {"type":"ready","data":{}}
+# 2. Check Health Status
+> {"type":"health","data":{}}
 
 # 3. Translate Text
-> {"type":"compute","data":{"text":"Hello, world!","html":false}}
+> {"type":"trans","data":{"text":"Hello, world!","html":false}}
 
 # 4. Shutdown Server
-> {"type":"poweroff","data":{"time":0,"force":true}}
+> {"type":"exit","data":{"time":0,"force":true}}
 ```
 
 ## Error Handling
@@ -400,8 +400,8 @@ All protocols use the same error code system. The `code` field in the response i
 
 - `0`: Success
 - `1000-1099`: Poweron related errors
-- `1100-1199`: Poweroff related errors  
-- `1200-1299`: Compute related errors
+- `1100-1199`: Exit related errors  
+- `1200-1299`: Trans related errors
 
 Detailed error code list please refer to [REFERENCE.md](REFERENCE.md#error-codes).
 
@@ -419,14 +419,14 @@ Detailed error code list please refer to [REFERENCE.md](REFERENCE.md#error-codes
 ```json
 {
   "code": 1200,
-  "message": "Engine is not ready. Please call poweron first"
+  "message": "Engine is not health. Please call poweron first"
 }
 ```
 
 #### WebSocket
 ```json
 {
-  "type": "compute",
+  "type": "trans",
   "code": 1201,
   "msg": "Translation failed: context deadline exceeded"
 }
@@ -449,9 +449,9 @@ curl -X POST http://localhost:8988/poweron \
 
 # 3. Wait for Model Loading
 while true; do
-  ready=$(curl -s http://localhost:8988/ready | jq -r '.data.ready')
-  if [ "$ready" = "true" ]; then
-    echo "Engine is ready"
+  health=$(curl -s http://localhost:8988/health | jq -r '.data.health')
+  if [ "$health" = "true" ]; then
+    echo "Engine is health"
     break
   fi
   echo "Waiting for engine..."
@@ -459,7 +459,7 @@ while true; do
 done
 
 # 4. Execute Translation
-result=$(curl -s -X POST http://localhost:8988/compute \
+result=$(curl -s -X POST http://localhost:8988/trans \
   -H "Content-Type: application/json" \
   -d '{"text": "Hello, world!", "html": false}')
 
@@ -470,7 +470,7 @@ translated=$(echo $result | jq -r '.data.translated_text')
 echo "Translated text: $translated"
 
 # 6. Graceful Shutdown Server
-curl -X POST http://localhost:8988/poweroff \
+curl -X POST http://localhost:8988/exit \
   -H "Content-Type: application/json" \
   -d '{"time": 5, "force": false}'
 ```

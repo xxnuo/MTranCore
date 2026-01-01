@@ -23,7 +23,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type ComputeRequest struct {
+type TransRequest struct {
 	Text string `json:"text"`
 	HTML bool   `json:"html"`
 }
@@ -62,7 +62,7 @@ var (
 	modelPath      = flag.String("model", "", "Model directory path (if empty, uses ./models/enzh)")
 	iterations     = flag.Int("n", 100, "Number of iterations per test")
 	concurrency    = flag.Int("c", 1, "Number of concurrent workers")
-	testType       = flag.String("test", "all", "Test type: all, compute, html, long, parallel")
+	testType       = flag.String("test", "all", "Test type: all, trans, html, long, parallel")
 	protocol       = flag.String("protocol", "all", "Protocol to use: all, http, grpc, grpc-unix, ws")
 	warmup         = flag.Int("warmup", 10, "Number of warmup requests before benchmarking")
 	grpcUnixSocket = flag.String("grpc-unix", "", "gRPC Unix socket path (enables gRPC Unix socket testing)")
@@ -70,7 +70,7 @@ var (
 
 // Client interface for different protocols
 type Client interface {
-	Compute(ctx context.Context, text string, html bool) (string, error)
+	Trans(ctx context.Context, text string, html bool) (string, error)
 	Close() error
 }
 
@@ -87,11 +87,11 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) Compute(ctx context.Context, text string, html bool) (string, error) {
-	reqBody := ComputeRequest{Text: text, HTML: html}
+func (c *HTTPClient) Trans(ctx context.Context, text string, html bool) (string, error) {
+	reqBody := TransRequest{Text: text, HTML: html}
 	body, _ := json.Marshal(reqBody)
 
-	resp, err := c.client.Post(c.baseURL+"/compute", "application/json", bytes.NewReader(body))
+	resp, err := c.client.Post(c.baseURL+"/trans", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -156,13 +156,13 @@ func NewGRPCUnixClient(socketPath string) (*GRPCClient, error) {
 	}, nil
 }
 
-func (c *GRPCClient) Compute(ctx context.Context, text string, html bool) (string, error) {
-	resp, err := c.client.Compute(ctx, &pb.ComputeRequest{Text: text, Html: html})
+func (c *GRPCClient) Trans(ctx context.Context, text string, html bool) (string, error) {
+	resp, err := c.client.Trans(ctx, &pb.TransRequest{Text: text, Html: html})
 	if err != nil {
 		return "", err
 	}
 	if resp.Code != 200 {
-		return "", fmt.Errorf("compute failed: %s", resp.Message)
+		return "", fmt.Errorf("trans failed: %s", resp.Message)
 	}
 	return resp.TranslatedText, nil
 }
@@ -185,12 +185,12 @@ func NewWSClient(wsURL string) (*WSClient, error) {
 	return &WSClient{conn: conn}, nil
 }
 
-func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string, error) {
+func (c *WSClient) Trans(ctx context.Context, text string, html bool) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	msg := map[string]interface{}{
-		"type": "compute",
+		"type": "trans",
 		"data": map[string]interface{}{"text": text, "html": html},
 	}
 
@@ -210,7 +210,7 @@ func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string,
 		return "", err
 	}
 	if resp.Code != 200 {
-		return "", fmt.Errorf("compute failed: %s", resp.Msg)
+		return "", fmt.Errorf("trans failed: %s", resp.Msg)
 	}
 	return resp.Data.TranslatedText, nil
 }
@@ -415,7 +415,7 @@ func runProtocolBenchmark(proto, modelDir string) []BenchmarkResult {
 			} else {
 				warmupClient = client
 			}
-			_, err := warmupClient.Compute(ctx, "Hello, world!", false)
+			_, err := warmupClient.Trans(ctx, "Hello, world!", false)
 			if err == nil {
 				successCount++
 			}
@@ -459,7 +459,7 @@ func runProtocolBenchmark(proto, modelDir string) []BenchmarkResult {
 		// Run specific test case
 		for _, tc := range testCases {
 			if strings.EqualFold(tc.Name, *testType) ||
-				(*testType == "compute" && tc.Name == "Short Greeting") ||
+				(*testType == "trans" && tc.Name == "Short Greeting") ||
 				(*testType == "html" && tc.HTML) {
 				result := benchmarkTest(proto, tc, client, wsPool)
 				results = append(results, result)
@@ -555,7 +555,7 @@ func benchmarkTest(proto string, tc TestCase, client Client, wsPool *WSClientPoo
 		}
 
 		reqStart := time.Now()
-		translated, err := testClient.Compute(ctx, tc.Text, tc.HTML)
+		translated, err := testClient.Trans(ctx, tc.Text, tc.HTML)
 		latency := time.Since(reqStart)
 
 		latencyMutex.Lock()
@@ -679,7 +679,7 @@ func benchmarkParallel(proto string, client Client, wsPool *WSClientPool) Benchm
 				}
 
 				reqStart := time.Now()
-				_, err := testClient.Compute(ctx, "Hello, world! This is a parallel test.", false)
+				_, err := testClient.Trans(ctx, "Hello, world! This is a parallel test.", false)
 				latency := time.Since(reqStart)
 
 				latencyMutex.Lock()

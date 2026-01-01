@@ -22,7 +22,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
-type ComputeRequest struct {
+type TransRequest struct {
 	Text string `json:"text"`
 	HTML bool   `json:"html"`
 }
@@ -95,7 +95,7 @@ var realisticTestData = []string{
 
 // Client interface for different protocols
 type Client interface {
-	Compute(ctx context.Context, text string, html bool) (string, error)
+	Trans(ctx context.Context, text string, html bool) (string, error)
 	Close() error
 }
 
@@ -112,11 +112,11 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 	}
 }
 
-func (c *HTTPClient) Compute(ctx context.Context, text string, html bool) (string, error) {
-	reqBody := ComputeRequest{Text: text, HTML: html}
+func (c *HTTPClient) Trans(ctx context.Context, text string, html bool) (string, error) {
+	reqBody := TransRequest{Text: text, HTML: html}
 	body, _ := json.Marshal(reqBody)
 
-	resp, err := c.client.Post(c.baseURL+"/compute", "application/json", bytes.NewReader(body))
+	resp, err := c.client.Post(c.baseURL+"/trans", "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -155,13 +155,13 @@ func NewGRPCClient(address string) (*GRPCClient, error) {
 	}, nil
 }
 
-func (c *GRPCClient) Compute(ctx context.Context, text string, html bool) (string, error) {
-	resp, err := c.client.Compute(ctx, &pb.ComputeRequest{Text: text, Html: html})
+func (c *GRPCClient) Trans(ctx context.Context, text string, html bool) (string, error) {
+	resp, err := c.client.Trans(ctx, &pb.TransRequest{Text: text, Html: html})
 	if err != nil {
 		return "", err
 	}
 	if resp.Code != 200 {
-		return "", fmt.Errorf("compute failed: %s", resp.Message)
+		return "", fmt.Errorf("trans failed: %s", resp.Message)
 	}
 	return resp.TranslatedText, nil
 }
@@ -184,12 +184,12 @@ func NewWSClient(wsURL string) (*WSClient, error) {
 	return &WSClient{conn: conn}, nil
 }
 
-func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string, error) {
+func (c *WSClient) Trans(ctx context.Context, text string, html bool) (string, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	msg := map[string]interface{}{
-		"type": "compute",
+		"type": "trans",
 		"data": map[string]interface{}{"text": text, "html": html},
 	}
 
@@ -209,7 +209,7 @@ func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string,
 		return "", err
 	}
 	if resp.Code != 200 {
-		return "", fmt.Errorf("compute failed: %s", resp.Msg)
+		return "", fmt.Errorf("trans failed: %s", resp.Msg)
 	}
 	return resp.Data.TranslatedText, nil
 }
@@ -412,7 +412,7 @@ func runHighConcurrencyTest(modelDir string, proto string) {
 				text, isHTML := getTestText(reqIdx)
 
 				reqStart := time.Now()
-				_, err := client.Compute(context.Background(), text, isHTML)
+				_, err := client.Trans(context.Background(), text, isHTML)
 				latency := time.Since(reqStart)
 
 				if err != nil {
@@ -494,7 +494,7 @@ func runSustainedLoadTest(modelDir string, proto string) {
 
 					text, isHTML := getTestText(reqNum)
 					reqStart := time.Now()
-					_, err := client.Compute(context.Background(), text, isHTML)
+					_, err := client.Trans(context.Background(), text, isHTML)
 					latency := time.Since(reqStart)
 
 					atomic.AddInt32(&requestCount, 1)
@@ -577,7 +577,7 @@ func runMemoryStabilityTest(modelDir string, proto string) {
 	for i := 0; i < *iterations; i++ {
 		text, isHTML := getTestText(i)
 		reqStart := time.Now()
-		_, err := client.Compute(ctx, text, isHTML)
+		_, err := client.Trans(ctx, text, isHTML)
 		latency := time.Since(reqStart)
 
 		if err == nil {
@@ -630,7 +630,7 @@ func runRapidReloadTest(modelDir string, proto string) {
 		// Verify engine is working with a translation
 		reloadStart := time.Now()
 		text, isHTML := getTestText(i)
-		_, err := client.Compute(ctx, text, isHTML)
+		_, err := client.Trans(ctx, text, isHTML)
 		latency := time.Since(reloadStart)
 
 		if err != nil {
@@ -673,8 +673,8 @@ func runMixedWorkloadTest(modelDir string, proto string) {
 	deadline := time.Now().Add(testDuration)
 
 	var wg sync.WaitGroup
-	var translateCount, healthCount, readyCount int32
-	stopChan := make(chan struct{})
+	         var translateCount, healthCount int32
+	         stopChan := make(chan struct{})
 	latencyChan := make(chan time.Duration, 1000)
 
 	fmt.Printf("Starting mixed workload test, duration %v\n", testDuration)
@@ -697,7 +697,7 @@ func runMixedWorkloadTest(modelDir string, proto string) {
 
 					text, isHTML := getTestText(reqNum)
 					reqStart := time.Now()
-					_, err := client.Compute(context.Background(), text, isHTML)
+					_, err := client.Trans(context.Background(), text, isHTML)
 					latency := time.Since(reqStart)
 
 					if err == nil {
@@ -714,98 +714,71 @@ func runMixedWorkloadTest(modelDir string, proto string) {
 		}(i)
 	}
 
-	// Health check workers (HTTP protocol only)
-	if proto == "http" {
-		for i := 0; i < 2; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-stopChan:
-						return
-					default:
-						if time.Now().After(deadline) {
-							return
-						}
-
-						resp, err := http.Get(*serverURL + "/health")
-						if err == nil {
-							resp.Body.Close()
-							atomic.AddInt32(&healthCount, 1)
-						}
-						time.Sleep(50 * time.Millisecond)
-					}
-				}
-			}()
-		}
-
-		// Ready check workers
-		for i := 0; i < 2; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for {
-					select {
-					case <-stopChan:
-						return
-					default:
-						if time.Now().After(deadline) {
-							return
-						}
-
-						resp, err := http.Get(*serverURL + "/ready")
-						if err == nil {
-							resp.Body.Close()
-							atomic.AddInt32(&readyCount, 1)
-						}
-						time.Sleep(50 * time.Millisecond)
-					}
-				}
-			}()
-		}
-	}
-
-	// Progress reporter
-	go func() {
-		ticker := time.NewTicker(5 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				elapsed := time.Since(start)
-				currentTotal := atomic.LoadInt32(&translateCount) + atomic.LoadInt32(&healthCount) + atomic.LoadInt32(&readyCount)
-				fmt.Printf("Progress: %.0fs / %.0fs - Total requests: %d (Translate: %d, Health: %d, Ready: %d, %.2f req/s)\n",
-					elapsed.Seconds(), testDuration.Seconds(), currentTotal,
-					atomic.LoadInt32(&translateCount), atomic.LoadInt32(&healthCount), atomic.LoadInt32(&readyCount),
-					float64(currentTotal)/elapsed.Seconds())
-			case <-stopChan:
-				return
-			}
-		}
-	}()
-
-	wg.Wait()
-	close(stopChan)
-	close(latencyChan)
-	actualDuration := time.Since(start)
-
-	// Collect latencies
-	var latencies []time.Duration
-	for lat := range latencyChan {
-		latencies = append(latencies, lat)
-	}
-
-	totalRequests := translateCount + healthCount + readyCount
-
-	fmt.Printf("\nMixed workload test completed:\n")
-	fmt.Printf("  Duration: %v\n", actualDuration)
-	fmt.Printf("  Total requests: %d\n", totalRequests)
-	fmt.Printf("  Translation requests: %d\n", translateCount)
-	fmt.Printf("  Health check requests: %d\n", healthCount)
-	fmt.Printf("  Ready check requests: %d\n", readyCount)
-	fmt.Printf("  Overall throughput: %.2f req/s\n", float64(totalRequests)/actualDuration.Seconds())
-
+	        // Health check workers (HTTP protocol only)
+	        if proto == "http" {
+	                for i := 0; i < 2; i++ {
+	                        wg.Add(1)
+	                        go func() {
+	                                defer wg.Done()
+	                                for {
+	                                        select {
+	                                        case <-stopChan:
+	                                                return
+	                                        default:
+	                                                if time.Now().After(deadline) {
+	                                                        return
+	                                                }
+	
+	                                                resp, err := http.Get(*serverURL + "/health")
+	                                                if err == nil {
+	                                                        resp.Body.Close()
+	                                                        atomic.AddInt32(&healthCount, 1)
+	                                                }
+	                                                time.Sleep(50 * time.Millisecond)
+	                                        }
+	                                }
+	                        }()
+	                }
+	        }
+	
+	        // Progress reporter
+	        go func() {
+	                ticker := time.NewTicker(5 * time.Second)
+	                defer ticker.Stop()
+	                for {
+	                        select {
+	                        case <-ticker.C:
+	                                elapsed := time.Since(start)
+	                                currentTotal := atomic.LoadInt32(&translateCount) + atomic.LoadInt32(&healthCount)
+	                                fmt.Printf("Progress: %.0fs / %.0fs - Total requests: %d (Translate: %d, Health: %d, %.2f req/s)\n",
+	                                        elapsed.Seconds(), testDuration.Seconds(), currentTotal,
+	                                        atomic.LoadInt32(&translateCount), atomic.LoadInt32(&healthCount),
+	                                        float64(currentTotal)/elapsed.Seconds())
+	                        case <-stopChan:
+	                                return
+	                        }
+	                }
+	        }()
+	
+	        wg.Wait()
+	        close(stopChan)
+	        close(latencyChan)
+	        actualDuration := time.Since(start)
+	
+	        // Collect latencies
+	        var latencies []time.Duration
+	        for lat := range latencyChan {
+	                latencies = append(latencies, lat)
+	        }
+	
+	        totalRequests := translateCount + healthCount
+	
+	        fmt.Printf("\nMixed workload test completed:\n")
+	        fmt.Printf("  Duration: %v\n", actualDuration)
+	        fmt.Printf("  Total requests: %d\n", totalRequests)
+	        fmt.Printf("  Translation requests: %d\n", translateCount)
+	        fmt.Printf("  Health check requests: %d\n", healthCount)
+	        fmt.Printf("  Overall throughput: %.2f req/s\n", float64(totalRequests)/actualDuration.Seconds())
 	if len(latencies) > 0 {
 		min, max, avg, p50, p95, p99 := calculateLatencyStats(latencies)
 		fmt.Printf("\nTranslation request latency statistics:\n")

@@ -21,27 +21,27 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ReadyRequest is empty
-type ReadyRequest struct {
+// HealthRequest is empty
+type HealthRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ReadyRequest) Reset() {
-	*x = ReadyRequest{}
+func (x *HealthRequest) Reset() {
+	*x = HealthRequest{}
 	mi := &file_proto_worker_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ReadyRequest) String() string {
+func (x *HealthRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ReadyRequest) ProtoMessage() {}
+func (*HealthRequest) ProtoMessage() {}
 
-func (x *ReadyRequest) ProtoReflect() protoreflect.Message {
+func (x *HealthRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -53,35 +53,35 @@ func (x *ReadyRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReadyRequest.ProtoReflect.Descriptor instead.
-func (*ReadyRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use HealthRequest.ProtoReflect.Descriptor instead.
+func (*HealthRequest) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{0}
 }
 
-// ReadyResponse indicates whether an engine is loaded
-type ReadyResponse struct {
+// HealthResponse indicates whether an engine is loaded
+type HealthResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Ready         bool                   `protobuf:"varint,3,opt,name=ready,proto3" json:"ready,omitempty"`
+	Health        bool                   `protobuf:"varint,3,opt,name=health,proto3" json:"health,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ReadyResponse) Reset() {
-	*x = ReadyResponse{}
+func (x *HealthResponse) Reset() {
+	*x = HealthResponse{}
 	mi := &file_proto_worker_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ReadyResponse) String() string {
+func (x *HealthResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ReadyResponse) ProtoMessage() {}
+func (*HealthResponse) ProtoMessage() {}
 
-func (x *ReadyResponse) ProtoReflect() protoreflect.Message {
+func (x *HealthResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -93,34 +93,34 @@ func (x *ReadyResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ReadyResponse.ProtoReflect.Descriptor instead.
-func (*ReadyResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use HealthResponse.ProtoReflect.Descriptor instead.
+func (*HealthResponse) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ReadyResponse) GetCode() int32 {
+func (x *HealthResponse) GetCode() int32 {
 	if x != nil {
 		return x.Code
 	}
 	return 0
 }
 
-func (x *ReadyResponse) GetMessage() string {
+func (x *HealthResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
 
-func (x *ReadyResponse) GetReady() bool {
+func (x *HealthResponse) GetHealth() bool {
 	if x != nil {
-		return x.Ready
+		return x.Health
 	}
 	return false
 }
 
-// PoweroffRequest contains shutdown parameters
-type PoweroffRequest struct {
+// ExitRequest contains shutdown parameters
+type ExitRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Time          int32                  `protobuf:"varint,1,opt,name=time,proto3" json:"time,omitempty"`   // seconds to wait before shutdown
 	Force         bool                   `protobuf:"varint,2,opt,name=force,proto3" json:"force,omitempty"` // force shutdown without waiting
@@ -128,20 +128,20 @@ type PoweroffRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PoweroffRequest) Reset() {
-	*x = PoweroffRequest{}
+func (x *ExitRequest) Reset() {
+	*x = ExitRequest{}
 	mi := &file_proto_worker_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PoweroffRequest) String() string {
+func (x *ExitRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PoweroffRequest) ProtoMessage() {}
+func (*ExitRequest) ProtoMessage() {}
 
-func (x *PoweroffRequest) ProtoReflect() protoreflect.Message {
+func (x *ExitRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -153,27 +153,27 @@ func (x *PoweroffRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PoweroffRequest.ProtoReflect.Descriptor instead.
-func (*PoweroffRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ExitRequest.ProtoReflect.Descriptor instead.
+func (*ExitRequest) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *PoweroffRequest) GetTime() int32 {
+func (x *ExitRequest) GetTime() int32 {
 	if x != nil {
 		return x.Time
 	}
 	return 0
 }
 
-func (x *PoweroffRequest) GetForce() bool {
+func (x *ExitRequest) GetForce() bool {
 	if x != nil {
 		return x.Force
 	}
 	return false
 }
 
-// PoweroffResponse indicates shutdown status
-type PoweroffResponse struct {
+// ExitResponse indicates shutdown status
+type ExitResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Code          int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
 	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
@@ -181,20 +181,20 @@ type PoweroffResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PoweroffResponse) Reset() {
-	*x = PoweroffResponse{}
+func (x *ExitResponse) Reset() {
+	*x = ExitResponse{}
 	mi := &file_proto_worker_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PoweroffResponse) String() string {
+func (x *ExitResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PoweroffResponse) ProtoMessage() {}
+func (*ExitResponse) ProtoMessage() {}
 
-func (x *PoweroffResponse) ProtoReflect() protoreflect.Message {
+func (x *ExitResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -206,27 +206,27 @@ func (x *PoweroffResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PoweroffResponse.ProtoReflect.Descriptor instead.
-func (*PoweroffResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ExitResponse.ProtoReflect.Descriptor instead.
+func (*ExitResponse) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PoweroffResponse) GetCode() int32 {
+func (x *ExitResponse) GetCode() int32 {
 	if x != nil {
 		return x.Code
 	}
 	return 0
 }
 
-func (x *PoweroffResponse) GetMessage() string {
+func (x *ExitResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
 
-// ComputeRequest contains the text to translate
-type ComputeRequest struct {
+// TransRequest contains the text to translate
+type TransRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
 	Html          bool                   `protobuf:"varint,2,opt,name=html,proto3" json:"html,omitempty"`
@@ -234,20 +234,20 @@ type ComputeRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ComputeRequest) Reset() {
-	*x = ComputeRequest{}
+func (x *TransRequest) Reset() {
+	*x = TransRequest{}
 	mi := &file_proto_worker_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ComputeRequest) String() string {
+func (x *TransRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ComputeRequest) ProtoMessage() {}
+func (*TransRequest) ProtoMessage() {}
 
-func (x *ComputeRequest) ProtoReflect() protoreflect.Message {
+func (x *TransRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -259,27 +259,27 @@ func (x *ComputeRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ComputeRequest.ProtoReflect.Descriptor instead.
-func (*ComputeRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use TransRequest.ProtoReflect.Descriptor instead.
+func (*TransRequest) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *ComputeRequest) GetText() string {
+func (x *TransRequest) GetText() string {
 	if x != nil {
 		return x.Text
 	}
 	return ""
 }
 
-func (x *ComputeRequest) GetHtml() bool {
+func (x *TransRequest) GetHtml() bool {
 	if x != nil {
 		return x.Html
 	}
 	return false
 }
 
-// ComputeResponse contains the translated text
-type ComputeResponse struct {
+// TransResponse contains the translated text
+type TransResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Code           int32                  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
 	Message        string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
@@ -288,20 +288,20 @@ type ComputeResponse struct {
 	sizeCache      protoimpl.SizeCache
 }
 
-func (x *ComputeResponse) Reset() {
-	*x = ComputeResponse{}
+func (x *TransResponse) Reset() {
+	*x = TransResponse{}
 	mi := &file_proto_worker_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ComputeResponse) String() string {
+func (x *TransResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ComputeResponse) ProtoMessage() {}
+func (*TransResponse) ProtoMessage() {}
 
-func (x *ComputeResponse) ProtoReflect() protoreflect.Message {
+func (x *TransResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_proto_worker_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -313,26 +313,26 @@ func (x *ComputeResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ComputeResponse.ProtoReflect.Descriptor instead.
-func (*ComputeResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use TransResponse.ProtoReflect.Descriptor instead.
+func (*TransResponse) Descriptor() ([]byte, []int) {
 	return file_proto_worker_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ComputeResponse) GetCode() int32 {
+func (x *TransResponse) GetCode() int32 {
 	if x != nil {
 		return x.Code
 	}
 	return 0
 }
 
-func (x *ComputeResponse) GetMessage() string {
+func (x *TransResponse) GetMessage() string {
 	if x != nil {
 		return x.Message
 	}
 	return ""
 }
 
-func (x *ComputeResponse) GetTranslatedText() string {
+func (x *TransResponse) GetTranslatedText() string {
 	if x != nil {
 		return x.TranslatedText
 	}
@@ -344,30 +344,30 @@ var File_proto_worker_proto protoreflect.FileDescriptor
 const file_proto_worker_proto_rawDesc = "" +
 	"\n" +
 	"\x12proto/worker.proto\x12\n" +
-	"translator\"\x0e\n" +
-	"\fReadyRequest\"S\n" +
-	"\rReadyResponse\x12\x12\n" +
+	"translator\"\x0f\n" +
+	"\rHealthRequest\"V\n" +
+	"\x0eHealthResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x14\n" +
-	"\x05ready\x18\x03 \x01(\bR\x05ready\";\n" +
-	"\x0fPoweroffRequest\x12\x12\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x16\n" +
+	"\x06health\x18\x03 \x01(\bR\x06health\"7\n" +
+	"\vExitRequest\x12\x12\n" +
 	"\x04time\x18\x01 \x01(\x05R\x04time\x12\x14\n" +
-	"\x05force\x18\x02 \x01(\bR\x05force\"@\n" +
-	"\x10PoweroffResponse\x12\x12\n" +
+	"\x05force\x18\x02 \x01(\bR\x05force\"<\n" +
+	"\fExitResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"8\n" +
-	"\x0eComputeRequest\x12\x12\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"6\n" +
+	"\fTransRequest\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x12\n" +
-	"\x04html\x18\x02 \x01(\bR\x04html\"h\n" +
-	"\x0fComputeResponse\x12\x12\n" +
+	"\x04html\x18\x02 \x01(\bR\x04html\"f\n" +
+	"\rTransResponse\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\x05R\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12'\n" +
-	"\x0ftranslated_text\x18\x03 \x01(\tR\x0etranslatedText2\xaa\x02\n" +
-	"\x11TranslatorService\x12<\n" +
-	"\x05Ready\x12\x18.translator.ReadyRequest\x1a\x19.translator.ReadyResponse\x12B\n" +
-	"\aCompute\x12\x1a.translator.ComputeRequest\x1a\x1b.translator.ComputeResponse\x12L\n" +
-	"\rComputeStream\x12\x1a.translator.ComputeRequest\x1a\x1b.translator.ComputeResponse(\x010\x01\x12E\n" +
-	"\bPoweroff\x12\x1b.translator.PoweroffRequest\x1a\x1c.translator.PoweroffResponseB(Z&github.com/xxnuo/MTranCore/proto;protob\x06proto3"
+	"\x0ftranslated_text\x18\x03 \x01(\tR\x0etranslatedText2\x95\x02\n" +
+	"\x11TranslatorService\x12?\n" +
+	"\x06Health\x12\x19.translator.HealthRequest\x1a\x1a.translator.HealthResponse\x12<\n" +
+	"\x05Trans\x12\x18.translator.TransRequest\x1a\x19.translator.TransResponse\x12F\n" +
+	"\vTransStream\x12\x18.translator.TransRequest\x1a\x19.translator.TransResponse(\x010\x01\x129\n" +
+	"\x04Exit\x12\x17.translator.ExitRequest\x1a\x18.translator.ExitResponseB(Z&github.com/xxnuo/MTranCore/proto;protob\x06proto3"
 
 var (
 	file_proto_worker_proto_rawDescOnce sync.Once
@@ -383,22 +383,22 @@ func file_proto_worker_proto_rawDescGZIP() []byte {
 
 var file_proto_worker_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_proto_worker_proto_goTypes = []any{
-	(*ReadyRequest)(nil),     // 0: translator.ReadyRequest
-	(*ReadyResponse)(nil),    // 1: translator.ReadyResponse
-	(*PoweroffRequest)(nil),  // 2: translator.PoweroffRequest
-	(*PoweroffResponse)(nil), // 3: translator.PoweroffResponse
-	(*ComputeRequest)(nil),   // 4: translator.ComputeRequest
-	(*ComputeResponse)(nil),  // 5: translator.ComputeResponse
+	(*HealthRequest)(nil),  // 0: translator.HealthRequest
+	(*HealthResponse)(nil), // 1: translator.HealthResponse
+	(*ExitRequest)(nil),    // 2: translator.ExitRequest
+	(*ExitResponse)(nil),   // 3: translator.ExitResponse
+	(*TransRequest)(nil),   // 4: translator.TransRequest
+	(*TransResponse)(nil),  // 5: translator.TransResponse
 }
 var file_proto_worker_proto_depIdxs = []int32{
-	0, // 0: translator.TranslatorService.Ready:input_type -> translator.ReadyRequest
-	4, // 1: translator.TranslatorService.Compute:input_type -> translator.ComputeRequest
-	4, // 2: translator.TranslatorService.ComputeStream:input_type -> translator.ComputeRequest
-	2, // 3: translator.TranslatorService.Poweroff:input_type -> translator.PoweroffRequest
-	1, // 4: translator.TranslatorService.Ready:output_type -> translator.ReadyResponse
-	5, // 5: translator.TranslatorService.Compute:output_type -> translator.ComputeResponse
-	5, // 6: translator.TranslatorService.ComputeStream:output_type -> translator.ComputeResponse
-	3, // 7: translator.TranslatorService.Poweroff:output_type -> translator.PoweroffResponse
+	0, // 0: translator.TranslatorService.Health:input_type -> translator.HealthRequest
+	4, // 1: translator.TranslatorService.Trans:input_type -> translator.TransRequest
+	4, // 2: translator.TranslatorService.TransStream:input_type -> translator.TransRequest
+	2, // 3: translator.TranslatorService.Exit:input_type -> translator.ExitRequest
+	1, // 4: translator.TranslatorService.Health:output_type -> translator.HealthResponse
+	5, // 5: translator.TranslatorService.Trans:output_type -> translator.TransResponse
+	5, // 6: translator.TranslatorService.TransStream:output_type -> translator.TransResponse
+	3, // 7: translator.TranslatorService.Exit:output_type -> translator.ExitResponse
 	4, // [4:8] is the sub-list for method output_type
 	0, // [0:4] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name

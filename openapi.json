@@ -38,7 +38,7 @@
     },
     {
       "name": "Lifecycle",
-      "description": "Engine lifecycle management (poweron/poweroff)"
+      "description": "Engine lifecycle management (poweron/exit)"
     },
     {
       "name": "Translation",
@@ -46,19 +46,7 @@
     }
   ],
   "paths": {
-    "/health": {
-      "get": {
-        "tags": ["HTTP", "Health"],
-        "summary": "Health check (HTTP)",
-        "description": "Check if the HTTP server is running",
-        "operationId": "healthHttp",
-        "responses": {
-          "200": {
-            "description": "Server is healthy"
-          }
-        }
-      }
-    },
+
     "/poweron": {
       "post": {
         "tags": ["HTTP", "Lifecycle"],
@@ -150,18 +138,18 @@
         }
       }
     },
-    "/poweroff": {
+    "/exit": {
       "post": {
         "tags": ["HTTP", "Lifecycle"],
         "summary": "Power off server (HTTP)",
         "description": "Gracefully shut down the server with optional delay and force flag",
-        "operationId": "poweroffHttp",
+        "operationId": "exitHttp",
         "requestBody": {
           "required": false,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PoweroffRequest"
+                "$ref": "#/components/schemas/ExitRequest"
               },
               "examples": {
                 "immediate": {
@@ -203,15 +191,15 @@
         }
       }
     },
-    "/ready": {
+    "/health": {
       "get": {
         "tags": ["HTTP", "Lifecycle"],
-        "summary": "Check engine ready status (HTTP)",
-        "description": "Check if the translation engine is loaded and ready to process requests",
-        "operationId": "readyHttp",
+        "summary": "Check engine health status (HTTP)",
+        "description": "Check if the translation engine is loaded and health to process requests",
+        "operationId": "healthHttp",
         "responses": {
           "200": {
-            "description": "Ready status",
+            "description": "Health status",
             "content": {
               "application/json": {
                 "schema": {
@@ -223,28 +211,28 @@
                       "type": "object",
                       "properties": {
                         "data": {
-                          "$ref": "#/components/schemas/ReadyResponse"
+                          "$ref": "#/components/schemas/HealthResponse"
                         }
                       }
                     }
                   ]
                 },
                 "examples": {
-                  "ready": {
-                    "summary": "Engine is ready",
+                  "health": {
+                    "summary": "Engine is health",
                     "value": {
                       "code": 200,
                       "data": {
-                        "ready": true
+                        "health": true
                       }
                     }
                   },
-                  "not_ready": {
-                    "summary": "Engine is not ready",
+                  "not_health": {
+                    "summary": "Engine is not health",
                     "value": {
                       "code": 200,
                       "data": {
-                        "ready": false
+                        "health": false
                       }
                     }
                   }
@@ -255,18 +243,18 @@
         }
       }
     },
-    "/compute": {
+    "/trans": {
       "post": {
         "tags": ["HTTP", "Translation"],
         "summary": "Translate text (HTTP)",
         "description": "Translate text using the loaded translation engine",
-        "operationId": "computeHttp",
+        "operationId": "transHttp",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ComputeRequest"
+                "$ref": "#/components/schemas/TransRequest"
               },
               "examples": {
                 "plain_text": {
@@ -398,29 +386,29 @@
         }
       }
     },
-    "/grpc/TranslatorService/Poweroff": {
+    "/grpc/TranslatorService/Exit": {
       "post": {
         "tags": ["gRPC", "Lifecycle"],
         "summary": "Power off server (gRPC)",
         "description": "Shut down the gRPC server",
-        "operationId": "poweroffGrpc",
+        "operationId": "exitGrpc",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PoweroffRequest"
+                "$ref": "#/components/schemas/ExitRequest"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Poweroff response",
+            "description": "Exit response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PoweroffResponse"
+                  "$ref": "#/components/schemas/ExitResponse"
                 }
               }
             }
@@ -428,12 +416,12 @@
         }
       }
     },
-    "/grpc/TranslatorService/Ready": {
+    "/grpc/TranslatorService/Health": {
       "post": {
         "tags": ["gRPC", "Lifecycle"],
-        "summary": "Check engine ready status (gRPC)",
+        "summary": "Check engine health status (gRPC)",
         "description": "Get the current engine status",
-        "operationId": "readyGrpc",
+        "operationId": "healthGrpc",
         "requestBody": {
           "required": true,
           "content": {
@@ -447,11 +435,11 @@
         },
         "responses": {
           "200": {
-            "description": "Ready response",
+            "description": "Health response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReadyResponseGrpc"
+                  "$ref": "#/components/schemas/HealthResponseGrpc"
                 }
               }
             }
@@ -459,29 +447,29 @@
         }
       }
     },
-    "/grpc/TranslatorService/Compute": {
+    "/grpc/TranslatorService/Trans": {
       "post": {
         "tags": ["gRPC", "Translation"],
         "summary": "Translate text (gRPC)",
         "description": "Translate a single text using gRPC",
-        "operationId": "computeGrpc",
+        "operationId": "transGrpc",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ComputeRequestGrpc"
+                "$ref": "#/components/schemas/TransRequestGrpc"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Compute response",
+            "description": "Trans response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ComputeResponseGrpc"
+                  "$ref": "#/components/schemas/TransResponseGrpc"
                 }
               }
             }
@@ -489,24 +477,24 @@
         }
       }
     },
-    "/grpc/TranslatorService/ComputeStream": {
+    "/grpc/TranslatorService/TransStream": {
       "post": {
         "tags": ["gRPC", "Translation"],
         "summary": "Translate text stream (gRPC)",
         "description": "Translate multiple texts in streaming fashion using bidirectional gRPC stream",
-        "operationId": "computeStreamGrpc",
+        "operationId": "transStreamGrpc",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "Stream of ComputeRequest messages",
+                "description": "Stream of TransRequest messages",
                 "properties": {
                   "stream": {
                     "type": "array",
                     "items": {
-                      "$ref": "#/components/schemas/ComputeRequestGrpc"
+                      "$ref": "#/components/schemas/TransRequestGrpc"
                     }
                   }
                 }
@@ -516,7 +504,7 @@
         },
         "responses": {
           "200": {
-            "description": "Stream of compute responses",
+            "description": "Stream of trans responses",
             "content": {
               "application/json": {
                 "schema": {
@@ -525,7 +513,7 @@
                     "stream": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/ComputeResponseGrpc"
+                        "$ref": "#/components/schemas/TransResponseGrpc"
                       }
                     }
                   }
@@ -540,7 +528,7 @@
       "get": {
         "tags": ["WebSocket"],
         "summary": "WebSocket endpoint",
-        "description": "WebSocket connection endpoint for bidirectional communication. Supports poweron, poweroff, ready, and compute message types.",
+        "description": "WebSocket connection endpoint for bidirectional communication. Supports poweron, exit, health, and trans message types.",
         "operationId": "websocketConnect",
         "parameters": [
           {
@@ -586,10 +574,10 @@
                       }
                     }
                   },
-                  "compute_success": {
-                    "summary": "Compute success response",
+                  "trans_success": {
+                    "summary": "Trans success response",
                     "value": {
-                      "type": "compute",
+                      "type": "trans",
                       "code": 200,
                       "msg": "success",
                       "data": {
@@ -597,14 +585,14 @@
                       }
                     }
                   },
-                  "ready_response": {
-                    "summary": "Ready status response",
+                  "health_response": {
+                    "summary": "Health status response",
                     "value": {
-                      "type": "ready",
+                      "type": "health",
                       "code": 200,
                       "msg": "success",
                       "data": {
-                        "ready": true
+                        "health": true
                       }
                     }
                   }
@@ -654,7 +642,7 @@
           }
         }
       },
-      "PoweroffRequest": {
+      "ExitRequest": {
         "type": "object",
         "properties": {
           "time": {
@@ -673,7 +661,7 @@
           }
         }
       },
-      "ComputeRequest": {
+      "TransRequest": {
         "type": "object",
         "required": ["text"],
         "properties": {
@@ -690,7 +678,7 @@
           }
         }
       },
-      "ComputeRequestGrpc": {
+      "TransRequestGrpc": {
         "type": "object",
         "required": ["text"],
         "properties": {
@@ -705,7 +693,7 @@
           }
         }
       },
-      "ComputeResponse": {
+      "TransResponse": {
         "type": "object",
         "properties": {
           "translated_text": {
@@ -715,12 +703,12 @@
           }
         }
       },
-      "ReadyResponse": {
+      "HealthResponse": {
         "type": "object",
         "properties": {
-          "ready": {
+          "health": {
             "type": "boolean",
-            "description": "Whether the engine is ready",
+            "description": "Whether the engine is health",
             "example": true
           }
         }
@@ -773,7 +761,7 @@
           }
         }
       },
-      "PoweroffResponse": {
+      "ExitResponse": {
         "type": "object",
         "properties": {
           "code": {
@@ -787,7 +775,7 @@
           }
         }
       },
-      "ReadyResponseGrpc": {
+      "HealthResponseGrpc": {
         "type": "object",
         "properties": {
           "code": {
@@ -799,13 +787,13 @@
             "type": "string",
             "example": "OK"
           },
-          "ready": {
+          "health": {
             "type": "boolean",
             "example": true
           }
         }
       },
-      "ComputeResponseGrpc": {
+      "TransResponseGrpc": {
         "type": "object",
         "properties": {
           "code": {
@@ -830,9 +818,9 @@
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["poweron", "poweroff", "ready", "compute"],
+            "enum": ["poweron", "exit", "health", "trans"],
             "description": "Message type",
-            "example": "compute"
+            "example": "trans"
           },
           "data": {
             "type": "object",
@@ -842,14 +830,14 @@
                 "$ref": "#/components/schemas/PoweronRequest"
               },
               {
-                "$ref": "#/components/schemas/PoweroffRequest"
+                "$ref": "#/components/schemas/ExitRequest"
               },
               {
-                "$ref": "#/components/schemas/ComputeRequest"
+                "$ref": "#/components/schemas/TransRequest"
               },
               {
                 "type": "object",
-                "description": "Empty object for ready message"
+                "description": "Empty object for health message"
               }
             ]
           }
@@ -862,14 +850,14 @@
             }
           },
           {
-            "type": "compute",
+            "type": "trans",
             "data": {
               "text": "Hello, world!",
               "html": false
             }
           },
           {
-            "type": "ready",
+            "type": "health",
             "data": {}
           }
         ]
@@ -882,7 +870,7 @@
           "type": {
             "type": "string",
             "description": "Same as request type",
-            "example": "compute"
+            "example": "trans"
           },
           "code": {
             "type": "integer",
@@ -932,27 +920,27 @@
           },
           "1100": {
             "type": "string",
-            "description": "Poweroff: Invalid parameters"
+            "description": "Exit: Invalid parameters"
           },
           "1101": {
             "type": "string",
-            "description": "Poweroff: Waiting for tasks to complete"
+            "description": "Exit: Waiting for tasks to complete"
           },
           "1109": {
             "type": "string",
-            "description": "Poweroff: Internal error"
+            "description": "Exit: Internal error"
           },
           "1200": {
             "type": "string",
-            "description": "Compute: Invalid parameters"
+            "description": "Trans: Invalid parameters"
           },
           "1201": {
             "type": "string",
-            "description": "Compute: Translation failure"
+            "description": "Trans: Translation failure"
           },
           "1209": {
             "type": "string",
-            "description": "Compute: Internal error"
+            "description": "Trans: Internal error"
           }
         }
       }

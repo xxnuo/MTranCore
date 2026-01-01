@@ -23,7 +23,7 @@ MTranCore Worker 是一个翻译服务,通过三种协议提供翻译能力:
 - Worker 在启动时会自动加载模型(需要通过环境变量或命令行参数指定模型路径)
 - 所有协议共享相同的翻译引擎实例
 - 翻译失败或引擎未就绪时,Worker 会自动退出
-- 简化的 API 仅保留核心功能:翻译(Compute/ComputeStream)、状态检查(Ready)、关闭(Poweroff)
+- 简化的 API 仅保留核心功能:翻译(Trans/TransStream)、状态检查(Health)、关闭(Exit)
 
 ## Error Codes
 
@@ -37,12 +37,12 @@ The service uses standardized error codes across all protocols:
 | 1002 | `CodePoweronIncompleteFiles` | Model files are incomplete or missing      |
 | 1003 | `CodePoweronInternalError`   | Internal error during poweron              |
 | 1009 | `CodePoweronUnknownError`    | Unknown poweron error                      |
-| 1100 | `CodePoweroffInvalidParams`  | Invalid parameters for poweroff request    |
+| 1100 | `CodePoweroffInvalidParams`  | Invalid parameters for exit request    |
 | 1101 | `CodePoweroffWaitingTask`    | Server is shutting down, waiting for tasks |
-| 1109 | `CodePoweroffInternalError`  | Internal error during poweroff             |
-| 1200 | `CodeComputeInvalidParams`   | Invalid parameters for compute request     |
+| 1109 | `CodePoweroffInternalError`  | Internal error during exit             |
+| 1200 | `CodeComputeInvalidParams`   | Invalid parameters for trans request     |
 | 1201 | `CodeComputeFailure`         | Translation computation failed             |
-| 1209 | `CodeComputeInternalError`   | Internal error during compute              |
+| 1209 | `CodeComputeInternalError`   | Internal error during trans              |
 
 ## gRPC Protocol
 
@@ -60,48 +60,48 @@ The gRPC service is defined in `worker.proto`:
 
 ```proto
 service TranslatorService {
-  rpc Ready(ReadyRequest) returns (ReadyResponse);
-  rpc Compute(ComputeRequest) returns (ComputeResponse);
-  rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
-  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
+  rpc Health(HealthRequest) returns (HealthResponse);
+  rpc Trans(TransRequest) returns (TransResponse);
+  rpc TransStream(stream TransRequest) returns (stream TransResponse);
+  rpc Exit(ExitRequest) returns (ExitResponse);
 }
 ```
 
 ### Methods
 
-#### Ready
+#### Health
 
 检查翻译引擎是否就绪。
 
-**Request**: `ReadyRequest` (empty)
+**Request**: `HealthRequest` (empty)
 
-**Response**: `ReadyResponse`
+**Response**: `HealthResponse`
 
 ```proto
-message ReadyResponse {
+message HealthResponse {
   int32 code = 1;      // Always 200
   string message = 2;  // "OK"
-  bool ready = 3;      // true if engine is loaded
+  bool health = 3;      // true if engine is loaded
 }
 ```
 
-#### Compute
+#### Trans
 
 翻译单个文本。翻译失败时 Worker 会自动退出。
 
-**Request**: `ComputeRequest`
+**Request**: `TransRequest`
 
 ```proto
-message ComputeRequest {
+message TransRequest {
   string text = 1;  // Text to translate (required)
   bool html = 2;    // Whether to treat input as HTML (default: false)
 }
 ```
 
-**Response**: `ComputeResponse`
+**Response**: `TransResponse`
 
 ```proto
-message ComputeResponse {
+message TransResponse {
   int32 code = 1;             // 200 on success
   string message = 2;         // "OK"
   string translated_text = 3; // Translated text
@@ -113,23 +113,23 @@ message ComputeResponse {
 - `1200`: Text is required
 - Worker 会在翻译失败或引擎未就绪时自动退出
 
-#### ComputeStream
+#### TransStream
 
 使用双向流翻译多个文本。翻译失败时 Worker 会自动退出。
 
-**Request Stream**: `ComputeRequest`
+**Request Stream**: `TransRequest`
 
 ```proto
-message ComputeRequest {
+message TransRequest {
   string text = 1;  // Text to translate
   bool html = 2;    // Whether to treat input as HTML
 }
 ```
 
-**Response Stream**: `ComputeResponse`
+**Response Stream**: `TransResponse`
 
 ```proto
-message ComputeResponse {
+message TransResponse {
   int32 code = 1;             // 200 on success
   string message = 2;         // "OK"
   string translated_text = 3; // Translated text
@@ -138,29 +138,29 @@ message ComputeResponse {
 
 **Behavior**:
 
-- Client sends multiple `ComputeRequest` messages
-- Server responds with corresponding `ComputeResponse` for each request
+- Client sends multiple `TransRequest` messages
+- Server responds with corresponding `TransResponse` for each request
 - Client closes stream by sending EOF
 - Empty text returns empty translation with success code
 - Worker 会在翻译失败或引擎未就绪时自动退出
 
-#### Poweroff
+#### Exit
 
 Shut down the server gracefully or forcefully.
 
-**Request**: `PoweroffRequest`
+**Request**: `ExitRequest`
 
 ```proto
-message PoweroffRequest {
+message ExitRequest {
   int32 time = 1;   // Seconds to wait before shutdown (default: 0)
   bool force = 2;   // Force shutdown without waiting for active streams
 }
 ```
 
-**Response**: `PoweroffResponse`
+**Response**: `ExitResponse`
 
 ```proto
-message PoweroffResponse {
+message ExitResponse {
   int32 code = 1;      // 200 on success, error code otherwise
   string message = 2;  // Description of shutdown status
 }
@@ -208,7 +208,7 @@ Error responses:
 
 ### Endpoints
 
-#### GET /ready
+#### GET /health
 
 检查翻译引擎是否就绪。
 
@@ -218,12 +218,12 @@ Error responses:
 {
   "code": 200,
   "data": {
-    "ready": true // or false
+    "health": true // or false
   }
 }
 ```
 
-#### POST /compute
+#### POST /trans
 
 翻译文本。翻译失败时 Worker 会自动退出。
 
@@ -253,7 +253,7 @@ Returns the translated text directly as plain text (not JSON).
   ```
 - Worker 会在翻译失败或引擎未就绪时自动退出
 
-#### POST /poweroff
+#### POST /exit
 
 Shut down the server gracefully or forcefully.
 
@@ -322,7 +322,7 @@ All messages are JSON objects with the following structure:
 
 ### Message Types
 
-#### compute
+#### trans
 
 翻译文本。翻译失败时 Worker 会自动退出。
 
@@ -330,7 +330,7 @@ All messages are JSON objects with the following structure:
 
 ```json
 {
-  "type": "compute",
+  "type": "trans",
   "data": {
     "text": "Text to translate",
     "html": false
@@ -342,7 +342,7 @@ All messages are JSON objects with the following structure:
 
 ```json
 {
-  "type": "compute",
+  "type": "trans",
   "code": 200,
   "msg": "success",
   "data": {
@@ -355,7 +355,7 @@ All messages are JSON objects with the following structure:
 - `1200`: text is required
 - Worker 会在翻译失败或引擎未就绪时自动退出
 
-#### poweroff
+#### exit
 
 Shut down the server.
 
@@ -363,7 +363,7 @@ Shut down the server.
 
 ```json
 {
-  "type": "poweroff",
+  "type": "exit",
   "data": {
     "time": 0, // Optional, default: 0
     "force": false // Optional, default: false
@@ -375,7 +375,7 @@ Shut down the server.
 
 ```json
 {
-  "type": "poweroff",
+  "type": "exit",
   "code": 200,
   "msg": "success",
   "data": {
@@ -384,7 +384,7 @@ Shut down the server.
 }
 ```
 
-**Note**: The WebSocket connection is closed after poweroff response.
+**Note**: The WebSocket connection is closed after exit response.
 
 ### Unknown Message Type
 
@@ -506,29 +506,29 @@ This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 
 **Note**: Worker auto-loads the model on startup, so no manual poweron is needed.
 
-1. **Check Ready** (optional)
-   - gRPC: Call `Ready()`
-   - HTTP: `GET /ready`
+1. **Check Health** (optional)
+   - gRPC: Call `Health()`
+   - HTTP: `GET /health`
 
 2. **Translate**
-   - gRPC: Call `Compute(text="Hello", html=false)`
-   - HTTP: `POST /compute` with `{"text": "Hello", "html": false}`
-   - WebSocket: Send `{"type": "compute", "data": {"text": "Hello", "html": false}}`
+   - gRPC: Call `Trans(text="Hello", html=false)`
+   - HTTP: `POST /trans` with `{"text": "Hello", "html": false}`
+   - WebSocket: Send `{"type": "trans", "data": {"text": "Hello", "html": false}}`
 
 ### Batch Translation (gRPC Stream)
 
-1. Open `ComputeStream` connection
-2. Send multiple `ComputeRequest` messages
-3. Receive corresponding `ComputeResponse` for each request
+1. Open `TransStream` connection
+2. Send multiple `TransRequest` messages
+3. Receive corresponding `TransResponse` for each request
 4. Close stream when done
 
 ### Graceful Shutdown
 
 1. **Wait for completion**:
-   - Call `Poweroff(time=5, force=false)` to wait 5 seconds + up to 30 seconds for active tasks
+   - Call `Exit(time=5, force=false)` to wait 5 seconds + up to 30 seconds for active tasks
 
 2. **Force shutdown**:
-   - Call `Poweroff(time=0, force=true)` for immediate shutdown
+   - Call `Exit(time=0, force=true)` for immediate shutdown
 
 ## Notes
 
@@ -537,6 +537,6 @@ This will start both TCP (on port 8988) and Unix socket listeners for gRPC.
 - All three protocols share the same translation engine instance
 - Paths can be absolute or relative to the configured `WORK_DIR`
 - The service handles concurrent requests through an internal queue
-- gRPC `ComputeStream` is optimized for batch processing
-- Empty text in compute requests returns empty translation with success code
+- gRPC `TransStream` is optimized for batch processing
+- Empty text in trans requests returns empty translation with success code
 - All servers can be enabled/disabled independently via environment variables

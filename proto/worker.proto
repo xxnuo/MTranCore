@@ -6,49 +6,49 @@ option go_package = "github.com/xxnuo/MTranCore/proto;proto";
 
 // TranslatorService provides translation capabilities
 service TranslatorService {
-  // Ready gets the current engine status
-  rpc Ready(ReadyRequest) returns (ReadyResponse);
+  // Health gets the current engine status
+  rpc Health(HealthRequest) returns (HealthResponse);
 
-  // Compute translates a single text
-  rpc Compute(ComputeRequest) returns (ComputeResponse);
+  // Trans translates a single text
+  rpc Trans(TransRequest) returns (TransResponse);
 
-  // ComputeStream translates multiple texts in streaming fashion
-  rpc ComputeStream(stream ComputeRequest) returns (stream ComputeResponse);
+  // TransStream translates multiple texts in streaming fashion
+  rpc TransStream(stream TransRequest) returns (stream TransResponse);
 
-  // Poweroff shuts down the server
-  rpc Poweroff(PoweroffRequest) returns (PoweroffResponse);
+  // Exit shuts down the server
+  rpc Exit(ExitRequest) returns (ExitResponse);
 }
 
-// ReadyRequest is empty
-message ReadyRequest {}
+// HealthRequest is empty
+message HealthRequest {}
 
-// ReadyResponse indicates whether an engine is loaded
-message ReadyResponse {
+// HealthResponse indicates whether an engine is loaded
+message HealthResponse {
   int32 code = 1;
   string message = 2;
-  bool ready = 3;
+  bool health = 3;
 }
 
-// PoweroffRequest contains shutdown parameters
-message PoweroffRequest {
+// ExitRequest contains shutdown parameters
+message ExitRequest {
   int32 time = 1;   // seconds to wait before shutdown
   bool force = 2;   // force shutdown without waiting
 }
 
-// PoweroffResponse indicates shutdown status
-message PoweroffResponse {
+// ExitResponse indicates shutdown status
+message ExitResponse {
   int32 code = 1;
   string message = 2;
 }
 
-// ComputeRequest contains the text to translate
-message ComputeRequest {
+// TransRequest contains the text to translate
+message TransRequest {
   string text = 1;
   bool html = 2;
 }
 
-// ComputeResponse contains the translated text
-message ComputeResponse {
+// TransResponse contains the translated text
+message TransResponse {
   int32 code = 1;
   string message = 2;
   string translated_text = 3;

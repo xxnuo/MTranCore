@@ -14,43 +14,33 @@ import (
 
 // EngineManager manages the translation engine lifecycle
 type EngineManager struct {
-	translator  *engine.Translator
-	loadedFiles *engine.LoadedFiles
-	queue       *TranslationQueue
-	mu          sync.RWMutex
-	config      *Config
-	closeOnce   sync.Once
-	// lastPoweronRequest stores the last successful poweron request for auto-reload after reboot
-	lastPoweronRequest *PoweronRequest
+        translator  *engine.Translator
+        loadedFiles *engine.LoadedFiles
+        queue       *TranslationQueue
+        mu          sync.RWMutex
+        config      *Config
+        closeOnce   sync.Once
 }
 
 // PoweronResult represents the result of a poweron operation
 type PoweronResult struct {
-	Success       bool
-	ErrorCode     ErrorCode
-	ErrorMessage  string
-	AlreadyLoaded bool
-}
-
-// RebootResult represents the result of a reboot operation
-type RebootResult struct {
-	Success      bool
-	ErrorCode    ErrorCode
-	ErrorMessage string
+        Success       bool
+        ErrorCode     ErrorCode
+        ErrorMessage  string
+        AlreadyLoaded bool
 }
 
 // NewEngineManager creates a new engine manager instance
 func NewEngineManager(cfg *Config) *EngineManager {
-	em := &EngineManager{
-		config: cfg,
-		queue:  NewTranslationQueue(),
-	}
+        em := &EngineManager{
+                config: cfg,
+                queue:  NewTranslationQueue(),
+        }
 
-	em.autoLoad()
+        em.autoLoad()
 
-	return em
+        return em
 }
-
 func (em *EngineManager) autoLoad() {
 	req := PoweronRequest{}
 
@@ -221,16 +211,12 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 	}
 	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: CreateTranslator succeeded, translator=%v", translator)
 
-	em.translator = translator
-	em.loadedFiles = loadedFiles
-	logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: em.translator set to %v", em.translator)
-
-	// Save the poweron request for potential auto-reload after reboot
-	em.lastPoweronRequest = &req
-
-	// Update the queue's translator
-	if em.queue != nil {
-		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: calling queue.SetTranslator")
+	        em.translator = translator
+	        em.loadedFiles = loadedFiles
+	        logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: em.translator set to %v", em.translator)
+	
+	        // Update the queue's translator
+	        if em.queue != nil {		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: calling queue.SetTranslator")
 		em.queue.SetTranslator(translator)
 		logger.Debug("[DEBUG-ENGINE] PoweronWithRequest: queue.SetTranslator done")
 	} else {
@@ -246,149 +232,11 @@ func (em *EngineManager) PoweronWithRequest(ctx context.Context, req PoweronRequ
 
 // Poweron loads the translation engine with model files (backward compatibility)
 func (em *EngineManager) Poweron(ctx context.Context, path string) PoweronResult {
-	return em.PoweronWithRequest(ctx, PoweronRequest{Path: path})
-}
-
-// Reboot reloads the translation engine
-func (em *EngineManager) Reboot(ctx context.Context, force bool, activeCounter *int32) RebootResult {
-	// If not force, wait for active requests to complete
-	if !force {
-		timeout := time.After(30 * time.Second)
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-timeout:
-				return RebootResult{
-					Success:      false,
-					ErrorCode:    CodeRebootWaitingTask,
-					ErrorMessage: "Timeout waiting for active requests to complete",
-				}
-			case <-ticker.C:
-				if activeCounter == nil || atomic.LoadInt32(activeCounter) == 0 {
-					goto reboot
-				}
-			}
-		}
-	}
-
-reboot:
-	em.mu.Lock()
-	defer em.mu.Unlock()
-
-	// Save the last poweron request before unloading
-	lastReq := em.lastPoweronRequest
-
-	// Close existing translator and loaded files
-	if err := em.unloadEngineLocked(); err != nil {
-		return RebootResult{
-			Success:      false,
-			ErrorCode:    CodeRebootInternalError,
-			ErrorMessage: "Failed to close translator: " + err.Error(),
-		}
-	}
-
-	// Auto-reload engine if we have a saved poweron request
-	if lastReq != nil {
-		logger.Info("Auto-reloading engine after reboot...")
-		result := em.PoweronWithRequest(ctx, *lastReq)
-		if !result.Success {
-			return RebootResult{
-				Success:      false,
-				ErrorCode:    CodeRebootInternalError,
-				ErrorMessage: "Failed to reload engine after reboot: " + result.ErrorMessage,
-			}
-		}
-		logger.Info("Engine auto-reloaded successfully after reboot")
-	}
-
-	return RebootResult{
-		Success:   true,
-		ErrorCode: CodeSuccess,
-	}
-}
-
-// RebootAsync performs a reboot asynchronously with optional delay
-func (em *EngineManager) RebootAsync(waitSeconds int, force bool, activeCounter *int32, onComplete func(RebootResult)) {
-	go func() {
-		// Wait for specified time
-		if waitSeconds > 0 {
-			time.Sleep(time.Duration(waitSeconds) * time.Second)
-		}
-
-		// If not force, wait for active requests to complete
-		if !force {
-			timeout := time.After(30 * time.Second)
-			ticker := time.NewTicker(100 * time.Millisecond)
-			defer ticker.Stop()
-
-			for {
-				select {
-				case <-timeout:
-					logger.Warn("Reboot timeout reached, forcing reboot")
-					goto reboot
-				case <-ticker.C:
-					if activeCounter == nil || atomic.LoadInt32(activeCounter) == 0 {
-						goto reboot
-					}
-				}
-			}
-		}
-
-	reboot:
-		em.mu.Lock()
-		
-		// Save the last poweron request before unloading
-		lastReq := em.lastPoweronRequest
-
-		// Close existing translator and loaded files
-		if err := em.unloadEngineLocked(); err != nil {
-			logger.Error("Failed to close translator during reboot: %v", err)
-			em.mu.Unlock()
-			if onComplete != nil {
-				onComplete(RebootResult{
-					Success:      false,
-					ErrorCode:    CodeRebootInternalError,
-					ErrorMessage: "Failed to close translator: " + err.Error(),
-				})
-			}
-			return
-		}
-
-		em.mu.Unlock()
-
-		// Auto-reload engine if we have a saved poweron request
-		if lastReq != nil {
-			logger.Info("Auto-reloading engine after reboot...")
-			ctx := context.Background()
-			result := em.PoweronWithRequest(ctx, *lastReq)
-			if !result.Success {
-				logger.Error("Failed to reload engine after reboot: %s", result.ErrorMessage)
-				if onComplete != nil {
-					onComplete(RebootResult{
-						Success:      false,
-						ErrorCode:    CodeRebootInternalError,
-						ErrorMessage: "Failed to reload engine after reboot: " + result.ErrorMessage,
-					})
-				}
-				return
-			}
-			logger.Info("Engine auto-reloaded successfully after reboot")
-		}
-
-		if onComplete != nil {
-			onComplete(RebootResult{
-				Success:   true,
-				ErrorCode: CodeSuccess,
-			})
-		}
-	}()
+        return em.PoweronWithRequest(ctx, PoweronRequest{Path: path})
 }
 
 // WaitForIdle waits for active requests to complete or timeout
-func (em *EngineManager) WaitForIdle(activeCounter *int32, timeoutDuration time.Duration) bool {
-	timeout := time.After(timeoutDuration)
+func (em *EngineManager) WaitForIdle(activeCounter *int32, timeoutDuration time.Duration) bool {	timeout := time.After(timeoutDuration)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -452,7 +300,7 @@ func (em *EngineManager) GetTranslator() *engine.Translator {
 	return em.translator
 }
 
-// IsReady checks if the engine is ready
+// IsReady checks if the engine is health
 func (em *EngineManager) IsReady() bool {
 	if em.queue != nil {
 		return em.queue.IsReady()

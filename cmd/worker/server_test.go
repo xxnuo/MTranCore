@@ -10,39 +10,34 @@ import (
 
 func TestNewUnifiedServer(t *testing.T) {
 	cfg := &Config{WorkDir: "./"}
-	server := NewUnifiedServer(cfg)
+	em := &EngineManager{
+		config: cfg,
+		queue:  NewTranslationQueue(),
+	}
+	server := NewUnifiedServerWithEngine(cfg, em)
 	if server == nil {
 		t.Fatal("NewUnifiedServer() returned nil")
 	}
 	if server.GetApp() == nil {
 		t.Error("NewUnifiedServer() app is nil")
 	}
+	server.Close()
 }
 
 func TestServer_Health(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewUnifiedServer(cfg)
+	cfg := &Config{
+		WorkDir:    "./",
+		EnableHTTP: true,
+	}
+	em := &EngineManager{
+		config: cfg,
+		queue:  NewTranslationQueue(),
+	}
+	server := NewUnifiedServerWithEngine(cfg, em)
 	defer server.Close()
 
-	req := httptest.NewRequest("GET", "/health", nil)
-	resp, err := server.GetApp().Test(req)
-	if err != nil {
-		t.Fatalf("app.Test() error = %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != fiber.StatusOK {
-		t.Errorf("Status code = %d, want %d", resp.StatusCode, fiber.StatusOK)
-	}
-}
-
-func TestServer_Ready(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewUnifiedServer(cfg)
-	defer server.Close()
-
-	t.Run("engine not ready", func(t *testing.T) {
-		req := httptest.NewRequest("GET", "/ready", nil)
+	t.Run("engine not health", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
 		resp, err := server.GetApp().Test(req)
 		if err != nil {
 			t.Fatalf("app.Test() error = %v", err)
@@ -67,15 +62,22 @@ func TestServer_Ready(t *testing.T) {
 			t.Fatal("Data is not a map")
 		}
 
-		if ready, ok := readyData["ready"].(bool); !ok || ready {
-			t.Errorf("ready = %v, want false", readyData["ready"])
+		if health, ok := readyData["health"].(bool); !ok || health {
+			t.Errorf("health = %v, want false", readyData["health"])
 		}
 	})
 }
 
 func TestServer_ErrorHandler(t *testing.T) {
-	cfg := &Config{WorkDir: "./"}
-	server := NewUnifiedServer(cfg)
+	cfg := &Config{
+		WorkDir:    "./",
+		EnableHTTP: true,
+	}
+	em := &EngineManager{
+		config: cfg,
+		queue:  NewTranslationQueue(),
+	}
+	server := NewUnifiedServerWithEngine(cfg, em)
 	defer server.Close()
 
 	// Test with a non-existent route

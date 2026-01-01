@@ -19,10 +19,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TranslatorService_Ready_FullMethodName         = "/translator.TranslatorService/Ready"
-	TranslatorService_Compute_FullMethodName       = "/translator.TranslatorService/Compute"
-	TranslatorService_ComputeStream_FullMethodName = "/translator.TranslatorService/ComputeStream"
-	TranslatorService_Poweroff_FullMethodName      = "/translator.TranslatorService/Poweroff"
+	TranslatorService_Health_FullMethodName      = "/translator.TranslatorService/Health"
+	TranslatorService_Trans_FullMethodName       = "/translator.TranslatorService/Trans"
+	TranslatorService_TransStream_FullMethodName = "/translator.TranslatorService/TransStream"
+	TranslatorService_Exit_FullMethodName        = "/translator.TranslatorService/Exit"
 )
 
 // TranslatorServiceClient is the client API for TranslatorService service.
@@ -31,14 +31,14 @@ const (
 //
 // TranslatorService provides translation capabilities
 type TranslatorServiceClient interface {
-	// Ready gets the current engine status
-	Ready(ctx context.Context, in *ReadyRequest, opts ...grpc.CallOption) (*ReadyResponse, error)
-	// Compute translates a single text
-	Compute(ctx context.Context, in *ComputeRequest, opts ...grpc.CallOption) (*ComputeResponse, error)
-	// ComputeStream translates multiple texts in streaming fashion
-	ComputeStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ComputeRequest, ComputeResponse], error)
-	// Poweroff shuts down the server
-	Poweroff(ctx context.Context, in *PoweroffRequest, opts ...grpc.CallOption) (*PoweroffResponse, error)
+	// Health gets the current engine status
+	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
+	// Trans translates a single text
+	Trans(ctx context.Context, in *TransRequest, opts ...grpc.CallOption) (*TransResponse, error)
+	// TransStream translates multiple texts in streaming fashion
+	TransStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TransRequest, TransResponse], error)
+	// Exit shuts down the server
+	Exit(ctx context.Context, in *ExitRequest, opts ...grpc.CallOption) (*ExitResponse, error)
 }
 
 type translatorServiceClient struct {
@@ -49,43 +49,43 @@ func NewTranslatorServiceClient(cc grpc.ClientConnInterface) TranslatorServiceCl
 	return &translatorServiceClient{cc}
 }
 
-func (c *translatorServiceClient) Ready(ctx context.Context, in *ReadyRequest, opts ...grpc.CallOption) (*ReadyResponse, error) {
+func (c *translatorServiceClient) Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ReadyResponse)
-	err := c.cc.Invoke(ctx, TranslatorService_Ready_FullMethodName, in, out, cOpts...)
+	out := new(HealthResponse)
+	err := c.cc.Invoke(ctx, TranslatorService_Health_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *translatorServiceClient) Compute(ctx context.Context, in *ComputeRequest, opts ...grpc.CallOption) (*ComputeResponse, error) {
+func (c *translatorServiceClient) Trans(ctx context.Context, in *TransRequest, opts ...grpc.CallOption) (*TransResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ComputeResponse)
-	err := c.cc.Invoke(ctx, TranslatorService_Compute_FullMethodName, in, out, cOpts...)
+	out := new(TransResponse)
+	err := c.cc.Invoke(ctx, TranslatorService_Trans_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *translatorServiceClient) ComputeStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[ComputeRequest, ComputeResponse], error) {
+func (c *translatorServiceClient) TransStream(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[TransRequest, TransResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &TranslatorService_ServiceDesc.Streams[0], TranslatorService_ComputeStream_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &TranslatorService_ServiceDesc.Streams[0], TranslatorService_TransStream_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &grpc.GenericClientStream[ComputeRequest, ComputeResponse]{ClientStream: stream}
+	x := &grpc.GenericClientStream[TransRequest, TransResponse]{ClientStream: stream}
 	return x, nil
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TranslatorService_ComputeStreamClient = grpc.BidiStreamingClient[ComputeRequest, ComputeResponse]
+type TranslatorService_TransStreamClient = grpc.BidiStreamingClient[TransRequest, TransResponse]
 
-func (c *translatorServiceClient) Poweroff(ctx context.Context, in *PoweroffRequest, opts ...grpc.CallOption) (*PoweroffResponse, error) {
+func (c *translatorServiceClient) Exit(ctx context.Context, in *ExitRequest, opts ...grpc.CallOption) (*ExitResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PoweroffResponse)
-	err := c.cc.Invoke(ctx, TranslatorService_Poweroff_FullMethodName, in, out, cOpts...)
+	out := new(ExitResponse)
+	err := c.cc.Invoke(ctx, TranslatorService_Exit_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -98,14 +98,14 @@ func (c *translatorServiceClient) Poweroff(ctx context.Context, in *PoweroffRequ
 //
 // TranslatorService provides translation capabilities
 type TranslatorServiceServer interface {
-	// Ready gets the current engine status
-	Ready(context.Context, *ReadyRequest) (*ReadyResponse, error)
-	// Compute translates a single text
-	Compute(context.Context, *ComputeRequest) (*ComputeResponse, error)
-	// ComputeStream translates multiple texts in streaming fashion
-	ComputeStream(grpc.BidiStreamingServer[ComputeRequest, ComputeResponse]) error
-	// Poweroff shuts down the server
-	Poweroff(context.Context, *PoweroffRequest) (*PoweroffResponse, error)
+	// Health gets the current engine status
+	Health(context.Context, *HealthRequest) (*HealthResponse, error)
+	// Trans translates a single text
+	Trans(context.Context, *TransRequest) (*TransResponse, error)
+	// TransStream translates multiple texts in streaming fashion
+	TransStream(grpc.BidiStreamingServer[TransRequest, TransResponse]) error
+	// Exit shuts down the server
+	Exit(context.Context, *ExitRequest) (*ExitResponse, error)
 	mustEmbedUnimplementedTranslatorServiceServer()
 }
 
@@ -116,17 +116,17 @@ type TranslatorServiceServer interface {
 // pointer dereference when methods are called.
 type UnimplementedTranslatorServiceServer struct{}
 
-func (UnimplementedTranslatorServiceServer) Ready(context.Context, *ReadyRequest) (*ReadyResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Ready not implemented")
+func (UnimplementedTranslatorServiceServer) Health(context.Context, *HealthRequest) (*HealthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Health not implemented")
 }
-func (UnimplementedTranslatorServiceServer) Compute(context.Context, *ComputeRequest) (*ComputeResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Compute not implemented")
+func (UnimplementedTranslatorServiceServer) Trans(context.Context, *TransRequest) (*TransResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Trans not implemented")
 }
-func (UnimplementedTranslatorServiceServer) ComputeStream(grpc.BidiStreamingServer[ComputeRequest, ComputeResponse]) error {
-	return status.Error(codes.Unimplemented, "method ComputeStream not implemented")
+func (UnimplementedTranslatorServiceServer) TransStream(grpc.BidiStreamingServer[TransRequest, TransResponse]) error {
+	return status.Error(codes.Unimplemented, "method TransStream not implemented")
 }
-func (UnimplementedTranslatorServiceServer) Poweroff(context.Context, *PoweroffRequest) (*PoweroffResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method Poweroff not implemented")
+func (UnimplementedTranslatorServiceServer) Exit(context.Context, *ExitRequest) (*ExitResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method Exit not implemented")
 }
 func (UnimplementedTranslatorServiceServer) mustEmbedUnimplementedTranslatorServiceServer() {}
 func (UnimplementedTranslatorServiceServer) testEmbeddedByValue()                           {}
@@ -149,63 +149,63 @@ func RegisterTranslatorServiceServer(s grpc.ServiceRegistrar, srv TranslatorServ
 	s.RegisterService(&TranslatorService_ServiceDesc, srv)
 }
 
-func _TranslatorService_Ready_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ReadyRequest)
+func _TranslatorService_Health_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(HealthRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TranslatorServiceServer).Ready(ctx, in)
+		return srv.(TranslatorServiceServer).Health(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: TranslatorService_Ready_FullMethodName,
+		FullMethod: TranslatorService_Health_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TranslatorServiceServer).Ready(ctx, req.(*ReadyRequest))
+		return srv.(TranslatorServiceServer).Health(ctx, req.(*HealthRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TranslatorService_Compute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ComputeRequest)
+func _TranslatorService_Trans_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TransRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TranslatorServiceServer).Compute(ctx, in)
+		return srv.(TranslatorServiceServer).Trans(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: TranslatorService_Compute_FullMethodName,
+		FullMethod: TranslatorService_Trans_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TranslatorServiceServer).Compute(ctx, req.(*ComputeRequest))
+		return srv.(TranslatorServiceServer).Trans(ctx, req.(*TransRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TranslatorService_ComputeStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(TranslatorServiceServer).ComputeStream(&grpc.GenericServerStream[ComputeRequest, ComputeResponse]{ServerStream: stream})
+func _TranslatorService_TransStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(TranslatorServiceServer).TransStream(&grpc.GenericServerStream[TransRequest, TransResponse]{ServerStream: stream})
 }
 
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
-type TranslatorService_ComputeStreamServer = grpc.BidiStreamingServer[ComputeRequest, ComputeResponse]
+type TranslatorService_TransStreamServer = grpc.BidiStreamingServer[TransRequest, TransResponse]
 
-func _TranslatorService_Poweroff_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(PoweroffRequest)
+func _TranslatorService_Exit_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ExitRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TranslatorServiceServer).Poweroff(ctx, in)
+		return srv.(TranslatorServiceServer).Exit(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: TranslatorService_Poweroff_FullMethodName,
+		FullMethod: TranslatorService_Exit_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TranslatorServiceServer).Poweroff(ctx, req.(*PoweroffRequest))
+		return srv.(TranslatorServiceServer).Exit(ctx, req.(*ExitRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -218,22 +218,22 @@ var TranslatorService_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*TranslatorServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "Ready",
-			Handler:    _TranslatorService_Ready_Handler,
+			MethodName: "Health",
+			Handler:    _TranslatorService_Health_Handler,
 		},
 		{
-			MethodName: "Compute",
-			Handler:    _TranslatorService_Compute_Handler,
+			MethodName: "Trans",
+			Handler:    _TranslatorService_Trans_Handler,
 		},
 		{
-			MethodName: "Poweroff",
-			Handler:    _TranslatorService_Poweroff_Handler,
+			MethodName: "Exit",
+			Handler:    _TranslatorService_Exit_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "ComputeStream",
-			Handler:       _TranslatorService_ComputeStream_Handler,
+			StreamName:    "TransStream",
+			Handler:       _TranslatorService_TransStream_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

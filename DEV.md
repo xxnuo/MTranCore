@@ -31,7 +31,7 @@ Error code definitions for return values:
 - 1003: Internal error
 - 1009: Unknown error
 
-### poweroff - Shutdown
+### exit - Shutdown
 
 Parameters:
 
@@ -45,11 +45,11 @@ Error code definitions for return values:
 - 1101: Waiting for requests to complete
 - 1109: Internal error
 
-### ready - Get Status
+### health - Get Status
 
-Returns whether the service is ready
+Returns whether the service is health
 
-### compute - Translate Text
+### trans - Translate Text
 
 Main parameters:
 
