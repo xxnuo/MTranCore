@@ -32,11 +32,11 @@ The service uses standardized error codes across all protocols:
 | Code | Constant                     | Description                                |
 | ---- | ---------------------------- | ------------------------------------------ |
 | 200  | `CodeSuccess`                | Operation completed successfully           |
-| 1000 | `CodePoweronInvalidParams`   | Invalid parameters for poweron request     |
-| 1001 | `CodePoweronPathNotExists`   | Model path does not exist                  |
-| 1002 | `CodePoweronIncompleteFiles` | Model files are incomplete or missing      |
-| 1003 | `CodePoweronInternalError`   | Internal error during poweron              |
-| 1009 | `CodePoweronUnknownError`    | Unknown poweron error                      |
+| 1000 | `CodeLoadInvalidParams`   | Invalid parameters for load request     |
+| 1001 | `CodeLoadPathNotExists`   | Model path does not exist                  |
+| 1002 | `CodeLoadIncompleteFiles` | Model files are incomplete or missing      |
+| 1003 | `CodeLoadInternalError`   | Internal error during load              |
+| 1009 | `CodeLoadUnknownError`    | Unknown load error                      |
 | 1100 | `CodeExitInvalidParams`  | Invalid parameters for exit request    |
 | 1101 | `CodeExitWaitingTask`    | Server is shutting down, waiting for tasks |
 | 1109 | `CodeExitInternalError`  | Internal error during exit             |

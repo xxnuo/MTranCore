@@ -28,10 +28,6 @@ type TransRequest struct {
 	HTML bool   `json:"html"`
 }
 
-type PoweronRequest struct {
-	Path string `json:"path"`
-}
-
 type BenchmarkResult struct {
 	Protocol      string
 	Name          string
@@ -120,13 +116,13 @@ type GRPCClient struct {
 }
 
 func NewGRPCClient(address string) (*GRPCClient, error) {
-	conn, err := grpc.NewClient(address, 
+	conn, err := grpc.NewClient(address,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		// Performance optimizations matching server settings
-		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window size
-		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window size
-		grpc.WithReadBufferSize(32 * 1024),      // 32KB read buffer
-		grpc.WithWriteBufferSize(32 * 1024),     // 32KB write buffer
+		grpc.WithInitialWindowSize(1<<20),     // 1MB initial window size
+		grpc.WithInitialConnWindowSize(1<<20), // 1MB initial connection window size
+		grpc.WithReadBufferSize(32*1024),      // 32KB read buffer
+		grpc.WithWriteBufferSize(32*1024),     // 32KB write buffer
 	)
 	if err != nil {
 		return nil, err
@@ -142,10 +138,10 @@ func NewGRPCUnixClient(socketPath string) (*GRPCClient, error) {
 	conn, err := grpc.NewClient("unix://"+socketPath,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		// Performance optimizations matching server settings
-		grpc.WithInitialWindowSize(1 << 20),     // 1MB initial window size
-		grpc.WithInitialConnWindowSize(1 << 20), // 1MB initial connection window size
-		grpc.WithReadBufferSize(32 * 1024),      // 32KB read buffer
-		grpc.WithWriteBufferSize(32 * 1024),     // 32KB write buffer
+		grpc.WithInitialWindowSize(1<<20),     // 1MB initial window size
+		grpc.WithInitialConnWindowSize(1<<20), // 1MB initial connection window size
+		grpc.WithReadBufferSize(32*1024),      // 32KB read buffer
+		grpc.WithWriteBufferSize(32*1024),     // 32KB write buffer
 	)
 	if err != nil {
 		return nil, err

@@ -8,31 +8,21 @@ type ErrorCode int
 const (
 	// Success code
 	CodeSuccess ErrorCode = 200
-
-	// Poweron error codes (1000-1099)
-	CodePoweronInvalidParams   ErrorCode = 1000
-	CodePoweronPathNotExists   ErrorCode = 1001
-	CodePoweronIncompleteFiles ErrorCode = 1002
-	CodePoweronInternalError   ErrorCode = 1003
-	CodePoweronUnknownError    ErrorCode = 1009
-
-	                // Exit error codes (1100-1199)
-
-	                CodeExitInvalidParams ErrorCode = 1100
-
-	                CodeExitWaitingTask   ErrorCode = 1101
-
-	                CodeExitInternalError ErrorCode = 1109
-
-	        
-
-	                // Trans error codes (1200-1299)
-
-	                CodeTransInvalidParams ErrorCode = 1200
-
-	                CodeTransFailure       ErrorCode = 1201
-
-	                CodeTransInternalError ErrorCode = 1209)
+	// Load error codes (1000-1099)
+	CodeLoadInvalidParams   ErrorCode = 1000
+	CodeLoadPathNotExists   ErrorCode = 1001
+	CodeLoadIncompleteFiles ErrorCode = 1002
+	CodeLoadInternalError   ErrorCode = 1003
+	CodeLoadUnknownError    ErrorCode = 1009
+	// Exit error codes (1100-1199)
+	CodeExitInvalidParams ErrorCode = 1100
+	CodeExitWaitingTask   ErrorCode = 1101
+	CodeExitInternalError ErrorCode = 1109
+	// Trans error codes (1200-1299)
+	CodeTransInvalidParams ErrorCode = 1200
+	CodeTransFailure       ErrorCode = 1201
+	CodeTransInternalError ErrorCode = 1209
+)
 
 // StandardError represents a standard error response
 type StandardError struct {

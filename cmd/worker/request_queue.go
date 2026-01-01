@@ -1,11 +1,10 @@
 package main
 
 import (
-	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
-	"sync"
-
 	engine "github.com/xxnuo/MTranCore/engine"
+	"github.com/xxnuo/MTranCore/internal/logger"
+	"sync"
 )
 
 // TranslationQueue manages sequential translation requests
@@ -17,13 +16,11 @@ type TranslationQueue struct {
 	mu         sync.RWMutex
 	closeOnce  sync.Once
 }
-
 type translationRequest struct {
 	ctx      context.Context
 	req      engine.TranslationRequest
 	respChan chan translationResponse
 }
-
 type translationResponse struct {
 	result string
 	err    error
@@ -35,11 +32,9 @@ func NewTranslationQueue() *TranslationQueue {
 		reqChan:  make(chan *translationRequest, 100), // Buffer for 100 requests
 		stopChan: make(chan struct{}),
 	}
-
 	// Start the worker goroutine
 	q.wg.Add(1)
 	go q.worker()
-
 	return q
 }
 
@@ -56,13 +51,11 @@ func (q *TranslationQueue) SetTranslator(translator *engine.Translator) {
 func (q *TranslationQueue) Translate(ctx context.Context, req engine.TranslationRequest) (string, error) {
 	logger.Debug("[DEBUG-QUEUE] Translate: starting, text length=%d", len(req.Text))
 	respChan := make(chan translationResponse, 1)
-
 	translationReq := &translationRequest{
 		ctx:      ctx,
 		req:      req,
 		respChan: respChan,
 	}
-
 	select {
 	case <-q.stopChan:
 		logger.Debug("[DEBUG-QUEUE] Translate: queue closed")
@@ -73,7 +66,6 @@ func (q *TranslationQueue) Translate(ctx context.Context, req engine.Translation
 	case q.reqChan <- translationReq:
 		logger.Debug("[DEBUG-QUEUE] Translate: request submitted to queue")
 	}
-
 	// Wait for response
 	select {
 	case <-q.stopChan:
@@ -91,7 +83,6 @@ func (q *TranslationQueue) Translate(ctx context.Context, req engine.Translation
 // worker processes translation requests sequentially
 func (q *TranslationQueue) worker() {
 	defer q.wg.Done()
-
 	for {
 		select {
 		case <-q.stopChan:
@@ -109,9 +100,7 @@ func (q *TranslationQueue) processRequest(req *translationRequest) {
 	translator := q.translator
 	q.mu.RUnlock()
 	logger.Debug("[DEBUG-QUEUE] processRequest: translator=%v", translator)
-
 	var resp translationResponse
-
 	if translator == nil {
 		logger.Debug("[DEBUG-QUEUE] processRequest: translator is nil")
 		resp.err = ErrTranslatorNotReady
@@ -120,7 +109,6 @@ func (q *TranslationQueue) processRequest(req *translationRequest) {
 		resp.result, resp.err = translator.Translate(req.ctx, req.req)
 		logger.Debug("[DEBUG-QUEUE] processRequest: translator.Translate returned, err=%v", resp.err)
 	}
-
 	// Send response
 	select {
 	case <-q.stopChan:

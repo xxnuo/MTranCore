@@ -47,97 +47,7 @@
   ],
   "paths": {
 
-    "/poweron": {
-      "post": {
-        "tags": ["HTTP", "Lifecycle"],
-        "summary": "Power on engine (HTTP)",
-        "description": "Load the translation engine with model files from specified path",
-        "operationId": "poweronHttp",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PoweronRequest"
-              },
-              "examples": {
-                "relative_path": {
-                  "summary": "Relative path example",
-                  "value": {
-                    "path": "models/enzh"
-                  }
-                },
-                "absolute_path": {
-                  "summary": "Absolute path example",
-                  "value": {
-                    "path": "/usr/share/bergamot/models/enzh"
-                  }
-                },
-                "individual_files": {
-                  "summary": "Individual file paths example",
-                  "value": {
-                    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-                    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-                    "vocabulary_path": "models/enzh/single_vocab.enzh.spm"
-                  }
-                },
-                "individual_files_dual_vocab": {
-                  "summary": "Individual file paths with dual vocabularies",
-                  "value": {
-                    "model_path": "models/enzh/model.enzh.intgemm.alphas.bin",
-                    "lexical_shortlist_path": "models/enzh/lex.50.50.enzh.s2t.bin",
-                    "vocabulary_paths": [
-                      "models/enzh/srcvocab.enzh.spm",
-                      "models/enzh/trgvocab.enzh.spm"
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Success or error response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandardResponse"
-                },
-                "examples": {
-                  "success": {
-                    "summary": "Engine loaded successfully",
-                    "value": {
-                      "code": 200,
-                      "data": {
-                        "message": "Engine loaded successfully"
-                      }
-                    }
-                  },
-                  "path_not_exists": {
-                    "summary": "Path does not exist",
-                    "value": {
-                      "code": 1001,
-                      "message": "path does not exist: /invalid/path"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/StandardResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
+
     "/exit": {
       "post": {
         "tags": ["HTTP", "Lifecycle"],
@@ -356,37 +266,7 @@
         }
       }
     },
-    "/grpc/TranslatorService/Poweron": {
-      "post": {
-        "tags": ["gRPC", "Lifecycle"],
-        "summary": "Power on engine (gRPC)",
-        "description": "Load the translation engine with model files",
-        "operationId": "poweronGrpc",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PoweronRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Poweron response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PoweronResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/grpc/TranslatorService/Exit": {
+        "/grpc/TranslatorService/Exit": {
       "post": {
         "tags": ["gRPC", "Lifecycle"],
         "summary": "Power off server (gRPC)",
@@ -609,39 +489,7 @@
   },
   "components": {
     "schemas": {
-      "PoweronRequest": {
-        "type": "object",
-        "properties": {
-          "path": {
-            "type": "string",
-            "description": "Path to model directory. Can be absolute or relative to work directory. Optional if individual file paths are provided.",
-            "example": "models/enzh"
-          },
-          "model_path": {
-            "type": "string",
-            "description": "Path to model file. Takes priority over path. Can be absolute or relative to work directory.",
-            "example": "models/enzh/model.enzh.intgemm.alphas.bin"
-          },
-          "lexical_shortlist_path": {
-            "type": "string",
-            "description": "Path to lexical shortlist file. Takes priority over path. Can be absolute or relative to work directory.",
-            "example": "models/enzh/lex.50.50.enzh.s2t.bin"
-          },
-          "vocabulary_path": {
-            "type": "string",
-            "description": "Path to vocabulary file. Merged with vocabulary_paths (vocabulary_path first). Can be absolute or relative to work directory.",
-            "example": "models/enzh/single_vocab.enzh.spm"
-          },
-          "vocabulary_paths": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Paths to vocabulary files. Merged with vocabulary_path (vocabulary_path first). Can be absolute or relative to work directory.",
-            "example": ["models/enzh/srcvocab.enzh.spm", "models/enzh/trgvocab.enzh.spm"]
-          }
-        }
-      },
+
       "ExitRequest": {
         "type": "object",
         "properties": {
@@ -747,20 +595,7 @@
           }
         }
       },
-      "PoweronResponse": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "integer",
-            "format": "int32",
-            "example": 0
-          },
-          "message": {
-            "type": "string",
-            "example": "Engine loaded successfully"
-          }
-        }
-      },
+
       "ExitResponse": {
         "type": "object",
         "properties": {

@@ -9,25 +9,20 @@ import (
 
 // Config holds the worker service configuration
 type Config struct {
-	LogLevel string
-	WorkDir  string
-
-	ServerHost string
-	ServerPort string
-
-	GRPCUnixSocket string
-
+	LogLevel        string
+	WorkDir         string
+	ServerHost      string
+	ServerPort      string
+	GRPCUnixSocket  string
 	EnableHTTP      bool
 	EnableWebSocket bool
 	EnableGRPC      bool
-
-	MaxLengthBreak int
-
-	ModelPath     string
-	ModelFile     string
-	ShortlistFile string
-	VocabFile     string
-	VocabFiles    []string
+	MaxLengthBreak  int
+	ModelPath       string
+	ModelFile       string
+	ShortlistFile   string
+	VocabFile       string
+	VocabFiles      []string
 }
 
 // GetConfig loads configuration with priority: CLI flags > environment variables > defaults
@@ -41,29 +36,24 @@ func GetConfig() *Config {
 	enableWebSocket := flag.String("enable-websocket", "", "Enable WebSocket server (true/false)")
 	enableGRPC := flag.String("enable-grpc", "", "Enable gRPC server (true/false)")
 	maxLengthBreak := flag.Int("max-length-break", 0, "Max text length before auto-splitting (default 200)")
-
 	modelPath := flag.String("model-path", "", "Path to model directory")
 	modelFile := flag.String("model-file", "", "Path to model file")
 	shortlistFile := flag.String("shortlist-file", "", "Path to shortlist file")
 	vocabFile := flag.String("vocab-file", "", "Path to vocabulary file")
 	vocabFiles := flag.String("vocab-files", "", "Comma-separated paths to vocabulary files")
-
 	flag.Parse()
-
 	getConfigValue := func(flagValue, envKey, defaultValue string) string {
 		if flagValue != "" {
 			return flagValue
 		}
 		return getEnvOrDefault(envKey, defaultValue)
 	}
-
 	getBoolConfigValue := func(flagValue, envKey, defaultValue string) bool {
 		if flagValue != "" {
 			return parseBool(flagValue)
 		}
 		return parseBool(getEnvOrDefault(envKey, defaultValue))
 	}
-
 	getIntConfigValue := func(flagValue int, envKey string, defaultValue int) int {
 		if flagValue != 0 {
 			return flagValue
@@ -75,7 +65,6 @@ func GetConfig() *Config {
 		}
 		return defaultValue
 	}
-
 	vocabFilesValue := getConfigValue(*vocabFiles, "VOCAB_FILES", "")
 	var vocabFilesSlice []string
 	if vocabFilesValue != "" {
@@ -84,30 +73,23 @@ func GetConfig() *Config {
 			vocabFilesSlice = append(vocabFilesSlice, expandPath(strings.TrimSpace(p)))
 		}
 	}
-
 	return &Config{
-		LogLevel: getConfigValue(*logLevel, "LOG_LEVEL", "info"),
-		WorkDir:  getConfigValue(*workDir, "WORK_DIR", "./"),
-
-		ServerHost: getConfigValue(*serverHost, "SERVER_HOST", "0.0.0.0"),
-		ServerPort: getConfigValue(*serverPort, "SERVER_PORT", "8988"),
-
-		GRPCUnixSocket: expandPath(getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", "")),
-
+		LogLevel:        getConfigValue(*logLevel, "LOG_LEVEL", "info"),
+		WorkDir:         getConfigValue(*workDir, "WORK_DIR", "./"),
+		ServerHost:      getConfigValue(*serverHost, "SERVER_HOST", "0.0.0.0"),
+		ServerPort:      getConfigValue(*serverPort, "SERVER_PORT", "8988"),
+		GRPCUnixSocket:  expandPath(getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", "")),
 		EnableHTTP:      getBoolConfigValue(*enableHTTP, "ENABLE_HTTP", "true"),
 		EnableWebSocket: getBoolConfigValue(*enableWebSocket, "ENABLE_WEBSOCKET", "true"),
 		EnableGRPC:      getBoolConfigValue(*enableGRPC, "ENABLE_GRPC", "true"),
-
-		MaxLengthBreak: getIntConfigValue(*maxLengthBreak, "MAX_LENGTH_BREAK", 200),
-
-		ModelPath:     expandPath(getConfigValue(*modelPath, "MODEL_PATH", "")),
-		ModelFile:     expandPath(getConfigValue(*modelFile, "MODEL_FILE", "")),
-		ShortlistFile: expandPath(getConfigValue(*shortlistFile, "SHORTLIST_FILE", "")),
-		VocabFile:     expandPath(getConfigValue(*vocabFile, "VOCAB_FILE", "")),
-		VocabFiles:    vocabFilesSlice,
+		MaxLengthBreak:  getIntConfigValue(*maxLengthBreak, "MAX_LENGTH_BREAK", 200),
+		ModelPath:       expandPath(getConfigValue(*modelPath, "MODEL_PATH", "")),
+		ModelFile:       expandPath(getConfigValue(*modelFile, "MODEL_FILE", "")),
+		ShortlistFile:   expandPath(getConfigValue(*shortlistFile, "SHORTLIST_FILE", "")),
+		VocabFile:       expandPath(getConfigValue(*vocabFile, "VOCAB_FILE", "")),
+		VocabFiles:      vocabFilesSlice,
 	}
 }
-
 func getEnvOrDefault(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
@@ -129,7 +111,6 @@ func parseBool(value string) bool {
 		return result
 	}
 }
-
 func expandPath(path string) string {
 	if path == "" {
 		return path

@@ -673,8 +673,8 @@ func runMixedWorkloadTest(modelDir string, proto string) {
 	deadline := time.Now().Add(testDuration)
 
 	var wg sync.WaitGroup
-	         var translateCount, healthCount int32
-	         stopChan := make(chan struct{})
+	var translateCount, healthCount int32
+	stopChan := make(chan struct{})
 	latencyChan := make(chan time.Duration, 1000)
 
 	fmt.Printf("Starting mixed workload test, duration %v\n", testDuration)
@@ -714,71 +714,71 @@ func runMixedWorkloadTest(modelDir string, proto string) {
 		}(i)
 	}
 
-	        // Health check workers (HTTP protocol only)
-	        if proto == "http" {
-	                for i := 0; i < 2; i++ {
-	                        wg.Add(1)
-	                        go func() {
-	                                defer wg.Done()
-	                                for {
-	                                        select {
-	                                        case <-stopChan:
-	                                                return
-	                                        default:
-	                                                if time.Now().After(deadline) {
-	                                                        return
-	                                                }
-	
-	                                                resp, err := http.Get(*serverURL + "/health")
-	                                                if err == nil {
-	                                                        resp.Body.Close()
-	                                                        atomic.AddInt32(&healthCount, 1)
-	                                                }
-	                                                time.Sleep(50 * time.Millisecond)
-	                                        }
-	                                }
-	                        }()
-	                }
-	        }
-	
-	        // Progress reporter
-	        go func() {
-	                ticker := time.NewTicker(5 * time.Second)
-	                defer ticker.Stop()
-	                for {
-	                        select {
-	                        case <-ticker.C:
-	                                elapsed := time.Since(start)
-	                                currentTotal := atomic.LoadInt32(&translateCount) + atomic.LoadInt32(&healthCount)
-	                                fmt.Printf("Progress: %.0fs / %.0fs - Total requests: %d (Translate: %d, Health: %d, %.2f req/s)\n",
-	                                        elapsed.Seconds(), testDuration.Seconds(), currentTotal,
-	                                        atomic.LoadInt32(&translateCount), atomic.LoadInt32(&healthCount),
-	                                        float64(currentTotal)/elapsed.Seconds())
-	                        case <-stopChan:
-	                                return
-	                        }
-	                }
-	        }()
-	
-	        wg.Wait()
-	        close(stopChan)
-	        close(latencyChan)
-	        actualDuration := time.Since(start)
-	
-	        // Collect latencies
-	        var latencies []time.Duration
-	        for lat := range latencyChan {
-	                latencies = append(latencies, lat)
-	        }
-	
-	        totalRequests := translateCount + healthCount
-	
-	        fmt.Printf("\nMixed workload test completed:\n")
-	        fmt.Printf("  Duration: %v\n", actualDuration)
-	        fmt.Printf("  Total requests: %d\n", totalRequests)
-	        fmt.Printf("  Translation requests: %d\n", translateCount)
-	        fmt.Printf("  Health check requests: %d\n", healthCount)
-	        fmt.Printf("  Overall throughput: %.2f req/s\n", float64(totalRequests)/actualDuration.Seconds())
+	// Health check workers (HTTP protocol only)
+	if proto == "http" {
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for {
+					select {
+					case <-stopChan:
+						return
+					default:
+						if time.Now().After(deadline) {
+							return
+						}
+
+						resp, err := http.Get(*serverURL + "/health")
+						if err == nil {
+							resp.Body.Close()
+							atomic.AddInt32(&healthCount, 1)
+						}
+						time.Sleep(50 * time.Millisecond)
+					}
+				}
+			}()
+		}
+	}
+
+	// Progress reporter
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				elapsed := time.Since(start)
+				currentTotal := atomic.LoadInt32(&translateCount) + atomic.LoadInt32(&healthCount)
+				fmt.Printf("Progress: %.0fs / %.0fs - Total requests: %d (Translate: %d, Health: %d, %.2f req/s)\n",
+					elapsed.Seconds(), testDuration.Seconds(), currentTotal,
+					atomic.LoadInt32(&translateCount), atomic.LoadInt32(&healthCount),
+					float64(currentTotal)/elapsed.Seconds())
+			case <-stopChan:
+				return
+			}
+		}
+	}()
+
+	wg.Wait()
+	close(stopChan)
+	close(latencyChan)
+	actualDuration := time.Since(start)
+
+	// Collect latencies
+	var latencies []time.Duration
+	for lat := range latencyChan {
+		latencies = append(latencies, lat)
+	}
+
+	totalRequests := translateCount + healthCount
+
+	fmt.Printf("\nMixed workload test completed:\n")
+	fmt.Printf("  Duration: %v\n", actualDuration)
+	fmt.Printf("  Total requests: %d\n", totalRequests)
+	fmt.Printf("  Translation requests: %d\n", translateCount)
+	fmt.Printf("  Health check requests: %d\n", healthCount)
+	fmt.Printf("  Overall throughput: %.2f req/s\n", float64(totalRequests)/actualDuration.Seconds())
 	if len(latencies) > 0 {
 		min, max, avg, p50, p95, p99 := calculateLatencyStats(latencies)
 		fmt.Printf("\nTranslation request latency statistics:\n")

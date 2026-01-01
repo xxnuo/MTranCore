@@ -13,19 +13,16 @@ func getProjectRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
 	// Check if we're already in the project root
 	if _, err := os.Stat(filepath.Join(cwd, "models")); err == nil {
 		return cwd, nil
 	}
-
 	// Search upward for the models directory
 	for dir := cwd; dir != "/"; dir = filepath.Dir(dir) {
 		if _, err := os.Stat(filepath.Join(dir, "models")); err == nil {
 			return dir, nil
 		}
 	}
-
 	return "", errors.New("cannot find project root directory containing models folder")
 }
 
@@ -35,14 +32,12 @@ func getTestModelPaths() (modelPath, shortlistPath string, vocabPaths []string, 
 	if err != nil {
 		return "", "", nil, err
 	}
-
 	modelPath = filepath.Join(projectRoot, "models", "enzh", "model.enzh.intgemm.alphas.bin")
 	shortlistPath = filepath.Join(projectRoot, "models", "enzh", "lex.50.50.enzh.s2t.bin")
 	vocabPaths = []string{
 		filepath.Join(projectRoot, "models", "enzh", "srcvocab.enzh.spm"),
 		filepath.Join(projectRoot, "models", "enzh", "trgvocab.enzh.spm"),
 	}
-
 	// Verify files exist
 	if _, err := os.Stat(modelPath); err != nil {
 		return "", "", nil, fmt.Errorf("model file not found: %w", err)
@@ -55,6 +50,5 @@ func getTestModelPaths() (modelPath, shortlistPath string, vocabPaths []string, 
 			return "", "", nil, fmt.Errorf("vocab file not found: %w", err)
 		}
 	}
-
 	return modelPath, shortlistPath, vocabPaths, nil
 }
