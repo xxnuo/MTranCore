@@ -36,6 +36,7 @@ type BenchmarkResult struct {
 
 type Config struct {
 	ServerAddr      string
+	UnixSocket      string
 	NumRequests     int
 	Concurrency     int
 	TestText        string
@@ -45,6 +46,7 @@ type Config struct {
 
 var (
 	serverAddr     = flag.String("server", "localhost:8080", "Server address")
+	unixSocket     = flag.String("unix-socket", "", "Unix socket path for gRPC (optional)")
 	numRequests    = flag.Int("requests", 10000, "Total number of requests")
 	concurrency    = flag.Int("concurrent", 100, "Number of concurrent workers")
 	testText       = flag.String("text", "Hello, world! This is a test message.", "Text to translate")
@@ -58,6 +60,7 @@ func main() {
 
 	cfg := Config{
 		ServerAddr:     *serverAddr,
+		UnixSocket:     *unixSocket,
 		NumRequests:    *numRequests,
 		Concurrency:    *concurrency,
 		TestText:       *testText,
@@ -95,6 +98,9 @@ func main() {
 		benchmarkHTTP(warmupCfg, true)
 		benchmarkWebSocket(warmupCfg, true)
 		benchmarkGRPC(warmupCfg, true)
+		if cfg.UnixSocket != "" {
+			benchmarkGRPCUnix(warmupCfg, true)
+		}
 
 		time.Sleep(2 * time.Second)
 		fmt.Printf("\n")
@@ -120,6 +126,15 @@ func main() {
 	if result := benchmarkGRPC(cfg, false); result != nil {
 		results = append(results, *result)
 		printResult(*result)
+	}
+
+	if cfg.UnixSocket != "" {
+		time.Sleep(1 * time.Second)
+		fmt.Printf("\nTesting gRPC (Unix Socket)...\n")
+		if result := benchmarkGRPCUnix(cfg, false); result != nil {
+			results = append(results, *result)
+			printResult(*result)
+		}
 	}
 
 	fmt.Printf("\n=== Summary ===\n")
@@ -385,6 +400,91 @@ func benchmarkGRPC(cfg Config, silent bool) *BenchmarkResult {
 	}
 
 	return calculateResult("gRPC", cfg.NumRequests, successCount, failureCount, totalDuration, latencies)
+}
+
+func benchmarkGRPCUnix(cfg Config, silent bool) *BenchmarkResult {
+	var successCount, failureCount int64
+	latencies := make([]time.Duration, 0, cfg.NumRequests)
+	var latenciesMu sync.Mutex
+	var firstError error
+	var firstErrorOnce sync.Once
+
+	startTime := time.Now()
+
+	var wg sync.WaitGroup
+	requestChan := make(chan int, cfg.NumRequests)
+
+	for i := 0; i < cfg.Concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+
+			conn, err := grpc.NewClient(
+				"unix://"+cfg.UnixSocket,
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+			)
+			if err != nil {
+				atomic.AddInt64(&failureCount, int64(cfg.NumRequests/cfg.Concurrency))
+				firstErrorOnce.Do(func() {
+					firstError = err
+				})
+				return
+			}
+			defer conn.Close()
+
+			client := pb.NewTranslatorServiceClient(conn)
+
+			for reqNum := range requestChan {
+				reqStart := time.Now()
+
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				resp, err := client.Trans(ctx, &pb.TransRequest{
+					Text: fmt.Sprintf("%s #%d", cfg.TestText, reqNum),
+					Html: cfg.TestHTML,
+				})
+				cancel()
+
+				if err != nil {
+					atomic.AddInt64(&failureCount, 1)
+					firstErrorOnce.Do(func() {
+						firstError = err
+					})
+					continue
+				}
+
+				latency := time.Since(reqStart)
+				if resp.Code == 200 {
+					atomic.AddInt64(&successCount, 1)
+					latenciesMu.Lock()
+					latencies = append(latencies, latency)
+					latenciesMu.Unlock()
+				} else {
+					atomic.AddInt64(&failureCount, 1)
+					firstErrorOnce.Do(func() {
+						firstError = fmt.Errorf("gRPC code=%d: %s", resp.Code, resp.Message)
+					})
+				}
+			}
+		}()
+	}
+
+	for i := 0; i < cfg.NumRequests; i++ {
+		requestChan <- i
+	}
+	close(requestChan)
+
+	wg.Wait()
+	totalDuration := time.Since(startTime)
+
+	if silent {
+		return nil
+	}
+
+	if firstError != nil && *verbose {
+		fmt.Printf("  [gRPC Unix] First error: %v\n", firstError)
+	}
+
+	return calculateResult("gRPC (Unix)", cfg.NumRequests, successCount, failureCount, totalDuration, latencies)
 }
 
 func calculateResult(protocol string, totalReqs int, success, failure int64, duration time.Duration, latencies []time.Duration) *BenchmarkResult {
