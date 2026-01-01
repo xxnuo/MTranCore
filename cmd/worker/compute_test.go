@@ -17,7 +17,7 @@ import (
 
 func TestServer_Compute(t *testing.T) {
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	t.Run("engine not ready", func(t *testing.T) {
@@ -101,7 +101,7 @@ func TestServer_Compute_Success(t *testing.T) {
 	modelDir := filepath.Dir(modelPath)
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	// Load engine first
@@ -197,7 +197,7 @@ func TestServer_ConcurrentTranslations(t *testing.T) {
 	modelDir := filepath.Dir(modelPath)
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	// Load engine

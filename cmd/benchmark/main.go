@@ -70,7 +70,6 @@ var (
 
 // Client interface for different protocols
 type Client interface {
-	Poweron(ctx context.Context, modelPath string) error
 	Compute(ctx context.Context, text string, html bool) (string, error)
 	Close() error
 }
@@ -86,22 +85,6 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 		baseURL: baseURL,
 		client:  &http.Client{Timeout: 30 * time.Second},
 	}
-}
-
-func (c *HTTPClient) Poweron(ctx context.Context, modelPath string) error {
-	reqBody := PoweronRequest{Path: modelPath}
-	body, _ := json.Marshal(reqBody)
-
-	resp, err := c.client.Post(c.baseURL+"/poweron", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
-	}
-	return nil
 }
 
 func (c *HTTPClient) Compute(ctx context.Context, text string, html bool) (string, error) {
@@ -173,17 +156,6 @@ func NewGRPCUnixClient(socketPath string) (*GRPCClient, error) {
 	}, nil
 }
 
-func (c *GRPCClient) Poweron(ctx context.Context, modelPath string) error {
-	resp, err := c.client.Poweron(ctx, &pb.PoweronRequest{Path: modelPath})
-	if err != nil {
-		return err
-	}
-	if resp.Code != 200 {
-		return fmt.Errorf("poweron failed: %s", resp.Message)
-	}
-	return nil
-}
-
 func (c *GRPCClient) Compute(ctx context.Context, text string, html bool) (string, error) {
 	resp, err := c.client.Compute(ctx, &pb.ComputeRequest{Text: text, Html: html})
 	if err != nil {
@@ -211,33 +183,6 @@ func NewWSClient(wsURL string) (*WSClient, error) {
 		return nil, err
 	}
 	return &WSClient{conn: conn}, nil
-}
-
-func (c *WSClient) Poweron(ctx context.Context, modelPath string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	msg := map[string]interface{}{
-		"type": "poweron",
-		"data": map[string]string{"path": modelPath},
-	}
-
-	if err := c.conn.WriteJSON(msg); err != nil {
-		return err
-	}
-
-	var resp struct {
-		Type string `json:"type"`
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	if err := c.conn.ReadJSON(&resp); err != nil {
-		return err
-	}
-	if resp.Code != 200 {
-		return fmt.Errorf("poweron failed: %s", resp.Msg)
-	}
-	return nil
 }
 
 func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string, error) {
@@ -455,22 +400,7 @@ func runProtocolBenchmark(proto, modelDir string) []BenchmarkResult {
 	fmt.Printf("   Model path: %s\n", modelDir)
 	fmt.Printf("   Protocol: %s\n", strings.ToUpper(proto))
 
-	loadStart := time.Now()
 	ctx := context.Background()
-
-	var poweronClient Client
-	if wsPool != nil {
-		poweronClient = wsPool.Get()
-	} else {
-		poweronClient = client
-	}
-
-	if err := poweronClient.Poweron(ctx, modelDir); err != nil {
-		fmt.Printf("❌ Failed to load engine: %v\n", err)
-		return nil
-	}
-	loadDuration := time.Since(loadStart)
-	fmt.Printf("✅ Engine loaded successfully in %s!\n\n", formatDuration(loadDuration))
 
 	// Warmup
 	if *warmup > 0 {

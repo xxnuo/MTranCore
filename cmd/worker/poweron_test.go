@@ -15,7 +15,7 @@ import (
 
 func TestServer_Poweron(t *testing.T) {
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	t.Run("missing path", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestServer_Poweron_Success(t *testing.T) {
 	modelDir := filepath.Dir(modelPath)
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	reqBody := PoweronRequest{
@@ -155,7 +155,7 @@ func TestServer_Poweron_IndividualPaths(t *testing.T) {
 	}
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	// Test with individual file paths
@@ -219,7 +219,7 @@ func TestServer_Poweron_VocabularyPathMerge(t *testing.T) {
 	}
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	// Test vocabulary_path and vocabulary_paths merging
@@ -264,7 +264,7 @@ func TestServer_ReloadEngine(t *testing.T) {
 	modelDir := filepath.Dir(modelPath)
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	loadReqBody := PoweronRequest{

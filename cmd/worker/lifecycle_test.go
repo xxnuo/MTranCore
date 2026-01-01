@@ -15,7 +15,7 @@ import (
 func TestServer_Close(t *testing.T) {
 	t.Run("close without engine", func(t *testing.T) {
 		cfg := &Config{WorkDir: "./"}
-		server := NewServer(cfg)
+		server := NewUnifiedServer(cfg)
 		err := server.Close()
 		if err != nil {
 			t.Errorf("Close() error = %v, want nil", err)
@@ -31,7 +31,7 @@ func TestServer_Close(t *testing.T) {
 		modelDir := filepath.Dir(modelPath)
 
 		cfg := &Config{WorkDir: "./"}
-		server := NewServer(cfg)
+		server := NewUnifiedServer(cfg)
 
 		// Load engine
 		loadReqBody := PoweronRequest{
@@ -63,7 +63,7 @@ func TestServer_ThreadSafety(t *testing.T) {
 	modelDir := filepath.Dir(modelPath)
 
 	cfg := &Config{WorkDir: "./"}
-	server := NewServer(cfg)
+	server := NewUnifiedServer(cfg)
 	defer server.Close()
 
 	var wg sync.WaitGroup

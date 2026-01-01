@@ -27,10 +27,6 @@ type ComputeRequest struct {
 	HTML bool   `json:"html"`
 }
 
-type PoweronRequest struct {
-	Path string `json:"path"`
-}
-
 type StressTestResult struct {
 	Name           string
 	Protocol       string
@@ -99,7 +95,6 @@ var realisticTestData = []string{
 
 // Client interface for different protocols
 type Client interface {
-	Poweron(ctx context.Context, modelPath string) error
 	Compute(ctx context.Context, text string, html bool) (string, error)
 	Close() error
 }
@@ -115,22 +110,6 @@ func NewHTTPClient(baseURL string) *HTTPClient {
 		baseURL: baseURL,
 		client:  &http.Client{Timeout: 30 * time.Second},
 	}
-}
-
-func (c *HTTPClient) Poweron(ctx context.Context, modelPath string) error {
-	reqBody := PoweronRequest{Path: modelPath}
-	body, _ := json.Marshal(reqBody)
-
-	resp, err := c.client.Post(c.baseURL+"/poweron", "application/json", bytes.NewReader(body))
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
-	}
-	return nil
 }
 
 func (c *HTTPClient) Compute(ctx context.Context, text string, html bool) (string, error) {
@@ -176,17 +155,6 @@ func NewGRPCClient(address string) (*GRPCClient, error) {
 	}, nil
 }
 
-func (c *GRPCClient) Poweron(ctx context.Context, modelPath string) error {
-	resp, err := c.client.Poweron(ctx, &pb.PoweronRequest{Path: modelPath})
-	if err != nil {
-		return err
-	}
-	if resp.Code != 200 {
-		return fmt.Errorf("poweron failed: %s", resp.Message)
-	}
-	return nil
-}
-
 func (c *GRPCClient) Compute(ctx context.Context, text string, html bool) (string, error) {
 	resp, err := c.client.Compute(ctx, &pb.ComputeRequest{Text: text, Html: html})
 	if err != nil {
@@ -214,33 +182,6 @@ func NewWSClient(wsURL string) (*WSClient, error) {
 		return nil, err
 	}
 	return &WSClient{conn: conn}, nil
-}
-
-func (c *WSClient) Poweron(ctx context.Context, modelPath string) error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	msg := map[string]interface{}{
-		"type": "poweron",
-		"data": map[string]string{"path": modelPath},
-	}
-
-	if err := c.conn.WriteJSON(msg); err != nil {
-		return err
-	}
-
-	var resp struct {
-		Type string `json:"type"`
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	}
-	if err := c.conn.ReadJSON(&resp); err != nil {
-		return err
-	}
-	if resp.Code != 200 {
-		return fmt.Errorf("poweron failed: %s", resp.Msg)
-	}
-	return nil
 }
 
 func (c *WSClient) Compute(ctx context.Context, text string, html bool) (string, error) {
@@ -448,13 +389,6 @@ func truncateString(s string, maxLen int) string {
 
 func runHighConcurrencyTest(modelDir string, proto string) {
 	fmt.Printf("=== High Concurrency Test ===\n")
-	fmt.Printf("Loading engine...\n")
-	ctx := context.Background()
-	if err := client.Poweron(ctx, modelDir); err != nil {
-		fmt.Printf("Failed to load engine: %v\n", err)
-		return
-	}
-	fmt.Printf("Engine loaded successfully!\n\n")
 
 	requestsPerWorker := 10
 	totalRequests := *concurrency * requestsPerWorker
@@ -531,13 +465,6 @@ func runHighConcurrencyTest(modelDir string, proto string) {
 
 func runSustainedLoadTest(modelDir string, proto string) {
 	fmt.Printf("=== Sustained Load Test ===\n")
-	fmt.Printf("Loading engine...\n")
-	ctx := context.Background()
-	if err := client.Poweron(ctx, modelDir); err != nil {
-		fmt.Printf("Failed to load engine: %v\n", err)
-		return
-	}
-	fmt.Printf("Engine loaded successfully!\n\n")
 
 	workers := 10
 	deadline := time.Now().Add(*duration)
@@ -638,13 +565,6 @@ func runSustainedLoadTest(modelDir string, proto string) {
 
 func runMemoryStabilityTest(modelDir string, proto string) {
 	fmt.Printf("=== Memory Stability Test ===\n")
-	fmt.Printf("Loading engine...\n")
-	ctx := context.Background()
-	if err := client.Poweron(ctx, modelDir); err != nil {
-		fmt.Printf("Failed to load engine: %v\n", err)
-		return
-	}
-	fmt.Printf("Engine loaded successfully!\n\n")
 
 	var successCount int32
 	latencies := make([]time.Duration, 0, *iterations)
@@ -652,6 +572,7 @@ func runMemoryStabilityTest(modelDir string, proto string) {
 
 	fmt.Printf("Starting memory stability test with %d iterations\n", *iterations)
 	start := time.Now()
+	ctx := context.Background()
 
 	for i := 0; i < *iterations; i++ {
 		text, isHTML := getTestText(i)
@@ -706,15 +627,8 @@ func runRapidReloadTest(modelDir string, proto string) {
 	for i := 0; i < *reloads; i++ {
 		fmt.Printf("Reload %d/%d\n", i+1, *reloads)
 
-		// Load engine
-		reloadStart := time.Now()
-		if err := client.Poweron(ctx, modelDir); err != nil {
-			fmt.Printf("  Failed: %v\n", err)
-			atomic.AddInt32(&failureCount, 1)
-			continue
-		}
-
 		// Verify engine is working with a translation
+		reloadStart := time.Now()
 		text, isHTML := getTestText(i)
 		_, err := client.Compute(ctx, text, isHTML)
 		latency := time.Since(reloadStart)
@@ -754,13 +668,6 @@ func runRapidReloadTest(modelDir string, proto string) {
 
 func runMixedWorkloadTest(modelDir string, proto string) {
 	fmt.Printf("=== Mixed Workload Test ===\n")
-	fmt.Printf("Loading engine...\n")
-	ctx := context.Background()
-	if err := client.Poweron(ctx, modelDir); err != nil {
-		fmt.Printf("Failed to load engine: %v\n", err)
-		return
-	}
-	fmt.Printf("Engine loaded successfully!\n\n")
 
 	testDuration := 20 * time.Second
 	deadline := time.Now().Add(testDuration)

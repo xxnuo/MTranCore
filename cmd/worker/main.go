@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/xxnuo/MTranCore/internal/logger"
 	"context"
 	"errors"
 	"fmt"
@@ -13,6 +12,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/xxnuo/MTranCore/internal/logger"
 
 	"github.com/gofiber/fiber/v3"
 	"github.com/soheilhy/cmux"
@@ -97,7 +98,7 @@ func main() {
 	// Start gRPC server if enabled
 	if cfg.EnableGRPC {
 		grpcService = NewGRPCServer(cfg)
-		
+
 		// Configure gRPC server with performance optimizations
 		grpcServerInstance = grpc.NewServer(
 			// Keepalive settings - keep connections alive to reduce handshake overhead
@@ -113,17 +114,17 @@ func main() {
 				PermitWithoutStream: true,            // Allow pings even when no streams are active
 			}),
 			// Connection options
-			grpc.MaxConcurrentStreams(1000),        // Allow up to 1000 concurrent streams per connection
-			grpc.MaxRecvMsgSize(4 * 1024 * 1024),   // 4MB max receive message size
-			grpc.MaxSendMsgSize(4 * 1024 * 1024),   // 4MB max send message size
+			grpc.MaxConcurrentStreams(1000),  // Allow up to 1000 concurrent streams per connection
+			grpc.MaxRecvMsgSize(4*1024*1024), // 4MB max receive message size
+			grpc.MaxSendMsgSize(4*1024*1024), // 4MB max send message size
 			// Buffer sizes for better throughput
-			grpc.ReadBufferSize(32 * 1024),  // 32KB read buffer
-			grpc.WriteBufferSize(32 * 1024), // 32KB write buffer
+			grpc.ReadBufferSize(32*1024),  // 32KB read buffer
+			grpc.WriteBufferSize(32*1024), // 32KB write buffer
 			// Initial window size for flow control
-			grpc.InitialWindowSize(1 << 20),     // 1MB initial window size (per stream)
-			grpc.InitialConnWindowSize(1 << 20), // 1MB initial connection window size
+			grpc.InitialWindowSize(1<<20),     // 1MB initial window size (per stream)
+			grpc.InitialConnWindowSize(1<<20), // 1MB initial connection window size
 		)
-		
+
 		pb.RegisterTranslatorServiceServer(grpcServerInstance, grpcService)
 		reflection.Register(grpcServerInstance)
 
