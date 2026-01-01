@@ -3,3 +3,4 @@ build/
 dist/
 models
 /worker
+/.claude

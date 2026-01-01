@@ -36,6 +36,7 @@ func main() {
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Fprintf(os.Stderr, "[PANIC] main: %v\n", r)
+			os.Exit(1)
 		}
 	}()
 	// Load configuration

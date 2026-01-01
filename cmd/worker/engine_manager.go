@@ -48,6 +48,13 @@ func NewEngineManager(cfg *Config) *EngineManager {
 	return em
 }
 func (em *EngineManager) autoLoad() {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("Panic during auto-load: %v", r)
+			logger.Fatal("Auto-load failed due to panic")
+		}
+	}()
+
 	req := LoadOptions{}
 	if em.config.ModelPath != "" {
 		req.Path = em.config.ModelPath
@@ -65,11 +72,16 @@ func (em *EngineManager) autoLoad() {
 		req.VocabularyPaths = em.config.VocabFiles
 	}
 	if req.Path == "" && req.ModelPath == "" {
+		logger.Error("No model configuration found")
+		logger.Error("Config details: ModelPath=%s, ModelFile=%s, WorkDir=%s", em.config.ModelPath, em.config.ModelFile, em.config.WorkDir)
 		logger.Fatal("No model configuration found. Set MODEL_PATH or MODEL_FILE environment variable")
 	}
+
+	logger.Info("Loading model with config: Path=%s, ModelFile=%s", req.Path, req.ModelPath)
 	ctx := context.Background()
 	result := em.Load(ctx, req)
 	if !result.Success {
+		logger.Error("Auto-load failed with error code %d: %s", result.ErrorCode, result.ErrorMessage)
 		logger.Fatal("Auto-load failed: %s", result.ErrorMessage)
 	}
 	logger.Info("Model auto-loaded successfully")
@@ -103,6 +115,12 @@ func (em *EngineManager) resolveFilePath(path string) string {
 
 // Load loads the translation engine with the LoadOptions
 func (em *EngineManager) Load(ctx context.Context, req LoadOptions) LoadResult {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("[PANIC] Load: %v", r)
+		}
+	}()
+
 	logger.Debug("[DEBUG-ENGINE] Load: starting, req=%+v", req)
 	em.mu.Lock()
 	defer em.mu.Unlock()

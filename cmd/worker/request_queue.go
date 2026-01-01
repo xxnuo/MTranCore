@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	engine "github.com/xxnuo/MTranCore/engine"
 	"github.com/xxnuo/MTranCore/internal/logger"
 	"sync"
@@ -83,6 +84,12 @@ func (q *TranslationQueue) Translate(ctx context.Context, req engine.Translation
 // worker processes translation requests sequentially
 func (q *TranslationQueue) worker() {
 	defer q.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("[PANIC] TranslationQueue worker: %v", r)
+		}
+	}()
+
 	for {
 		select {
 		case <-q.stopChan:
@@ -95,6 +102,20 @@ func (q *TranslationQueue) worker() {
 
 // processRequest handles a single translation request
 func (q *TranslationQueue) processRequest(req *translationRequest) {
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Error("[PANIC] processRequest: %v", r)
+			resp := translationResponse{
+				err: fmt.Errorf("translation panic: %v", r),
+			}
+			select {
+			case <-q.stopChan:
+				return
+			case req.respChan <- resp:
+			}
+		}
+	}()
+
 	logger.Debug("[DEBUG-QUEUE] processRequest: starting")
 	q.mu.RLock()
 	translator := q.translator
