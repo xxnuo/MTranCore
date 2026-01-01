@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -414,13 +415,27 @@ func benchmarkGRPCUnix(cfg Config, silent bool) *BenchmarkResult {
 	var wg sync.WaitGroup
 	requestChan := make(chan int, cfg.NumRequests)
 
+	unixAddr := cfg.UnixSocket
+	if !strings.HasPrefix(unixAddr, "/") {
+		var err error
+		unixAddr, err = filepath.Abs(unixAddr)
+		if err != nil {
+			return &BenchmarkResult{
+				Protocol:      "gRPC (Unix)",
+				TotalRequests: cfg.NumRequests,
+				FailureCount:  int64(cfg.NumRequests),
+				TotalDuration: time.Since(startTime),
+			}
+		}
+	}
+
 	for i := 0; i < cfg.Concurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 
 			conn, err := grpc.NewClient(
-				"unix://"+cfg.UnixSocket,
+				"unix:"+unixAddr,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 			)
 			if err != nil {
