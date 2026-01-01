@@ -39,6 +39,15 @@ func NewGRPCServerWithEngine(cfg *Config, em *EngineManager) *GRPCServer {
 	}
 }
 
+func (g *GRPCServer) Ready(ctx context.Context, req *pb.ReadyRequest) (*pb.ReadyResponse, error) {
+	isReady := g.engineManager.IsReady()
+	return &pb.ReadyResponse{
+		Code:    int32(CodeSuccess),
+		Message: "OK",
+		Ready:   isReady,
+	}, nil
+}
+
 func (g *GRPCServer) Poweroff(ctx context.Context, req *pb.PoweroffRequest) (*pb.PoweroffResponse, error) {
 	if req.Time < 0 {
 		return &pb.PoweroffResponse{

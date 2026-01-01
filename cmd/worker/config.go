@@ -12,23 +12,26 @@ type Config struct {
 	LogLevel string
 	WorkDir  string
 
-	// Unified server configuration
 	ServerHost string
 	ServerPort string
 
-	// gRPC Unix socket configuration
-	GRPCUnixSocket string // Path to Unix socket file for gRPC (if enabled)
+	GRPCUnixSocket string
 
 	EnableHTTP      bool
 	EnableWebSocket bool
 	EnableGRPC      bool
 
 	MaxLengthBreak int
+
+	ModelPath     string
+	ModelFile     string
+	ShortlistFile string
+	VocabFile     string
+	VocabFiles    []string
 }
 
 // GetConfig loads configuration with priority: CLI flags > environment variables > defaults
 func GetConfig() *Config {
-	// Define command line flags
 	logLevel := flag.String("log-level", "", "Log level (debug, info, warn, error)")
 	workDir := flag.String("work-dir", "", "Working directory")
 	serverHost := flag.String("host", "", "Server host address")
@@ -39,9 +42,14 @@ func GetConfig() *Config {
 	enableGRPC := flag.String("enable-grpc", "", "Enable gRPC server (true/false)")
 	maxLengthBreak := flag.Int("max-length-break", 0, "Max text length before auto-splitting (default 200)")
 
+	modelPath := flag.String("model-path", "", "Path to model directory")
+	modelFile := flag.String("model-file", "", "Path to model file")
+	shortlistFile := flag.String("shortlist-file", "", "Path to shortlist file")
+	vocabFile := flag.String("vocab-file", "", "Path to vocabulary file")
+	vocabFiles := flag.String("vocab-files", "", "Comma-separated paths to vocabulary files")
+
 	flag.Parse()
 
-	// Helper function to get value with priority: flag > env > default
 	getConfigValue := func(flagValue, envKey, defaultValue string) string {
 		if flagValue != "" {
 			return flagValue
@@ -49,7 +57,6 @@ func GetConfig() *Config {
 		return getEnvOrDefault(envKey, defaultValue)
 	}
 
-	// Helper function to get boolean value with priority
 	getBoolConfigValue := func(flagValue, envKey, defaultValue string) bool {
 		if flagValue != "" {
 			return parseBool(flagValue)
@@ -57,7 +64,6 @@ func GetConfig() *Config {
 		return parseBool(getEnvOrDefault(envKey, defaultValue))
 	}
 
-	// Helper function to get int value with priority
 	getIntConfigValue := func(flagValue int, envKey string, defaultValue int) int {
 		if flagValue != 0 {
 			return flagValue
@@ -70,22 +76,35 @@ func GetConfig() *Config {
 		return defaultValue
 	}
 
+	vocabFilesValue := getConfigValue(*vocabFiles, "VOCAB_FILES", "")
+	var vocabFilesSlice []string
+	if vocabFilesValue != "" {
+		parts := strings.Split(vocabFilesValue, ",")
+		for _, p := range parts {
+			vocabFilesSlice = append(vocabFilesSlice, expandPath(strings.TrimSpace(p)))
+		}
+	}
+
 	return &Config{
 		LogLevel: getConfigValue(*logLevel, "LOG_LEVEL", "info"),
 		WorkDir:  getConfigValue(*workDir, "WORK_DIR", "./"),
 
-		// Unified server configuration
 		ServerHost: getConfigValue(*serverHost, "SERVER_HOST", "0.0.0.0"),
 		ServerPort: getConfigValue(*serverPort, "SERVER_PORT", "8988"),
 
-		// gRPC Unix socket configuration
-		GRPCUnixSocket: getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", ""),
+		GRPCUnixSocket: expandPath(getConfigValue(*grpcUnixSocket, "GRPC_UNIX_SOCKET", "")),
 
 		EnableHTTP:      getBoolConfigValue(*enableHTTP, "ENABLE_HTTP", "true"),
 		EnableWebSocket: getBoolConfigValue(*enableWebSocket, "ENABLE_WEBSOCKET", "true"),
 		EnableGRPC:      getBoolConfigValue(*enableGRPC, "ENABLE_GRPC", "true"),
 
 		MaxLengthBreak: getIntConfigValue(*maxLengthBreak, "MAX_LENGTH_BREAK", 200),
+
+		ModelPath:     expandPath(getConfigValue(*modelPath, "MODEL_PATH", "")),
+		ModelFile:     expandPath(getConfigValue(*modelFile, "MODEL_FILE", "")),
+		ShortlistFile: expandPath(getConfigValue(*shortlistFile, "SHORTLIST_FILE", "")),
+		VocabFile:     expandPath(getConfigValue(*vocabFile, "VOCAB_FILE", "")),
+		VocabFiles:    vocabFilesSlice,
 	}
 }
 
@@ -106,8 +125,20 @@ func parseBool(value string) bool {
 	case "false", "0", "no":
 		return false
 	default:
-		// Try standard parsing as fallback
 		result, _ := strconv.ParseBool(value)
 		return result
 	}
+}
+
+func expandPath(path string) string {
+	if path == "" {
+		return path
+	}
+	if strings.HasPrefix(path, "~") {
+		homeDir, err := os.UserHomeDir()
+		if err == nil {
+			return strings.Replace(path, "~", homeDir, 1)
+		}
+	}
+	return path
 }

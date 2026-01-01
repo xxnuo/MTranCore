@@ -41,10 +41,50 @@ type RebootResult struct {
 
 // NewEngineManager creates a new engine manager instance
 func NewEngineManager(cfg *Config) *EngineManager {
-	return &EngineManager{
+	em := &EngineManager{
 		config: cfg,
 		queue:  NewTranslationQueue(),
 	}
+
+	em.autoLoad()
+
+	return em
+}
+
+func (em *EngineManager) autoLoad() {
+	req := PoweronRequest{}
+
+	if em.config.ModelPath != "" {
+		req.Path = em.config.ModelPath
+	}
+
+	if em.config.ModelFile != "" {
+		req.ModelPath = em.config.ModelFile
+	}
+
+	if em.config.ShortlistFile != "" {
+		req.LexicalShortlistPath = em.config.ShortlistFile
+	}
+
+	if em.config.VocabFile != "" {
+		req.VocabularyPath = em.config.VocabFile
+	}
+
+	if len(em.config.VocabFiles) > 0 {
+		req.VocabularyPaths = em.config.VocabFiles
+	}
+
+	if req.Path == "" && req.ModelPath == "" {
+		logger.Fatal("No model configuration found. Set MODEL_PATH or MODEL_FILE environment variable")
+	}
+
+	ctx := context.Background()
+	result := em.PoweronWithRequest(ctx, req)
+	if !result.Success {
+		logger.Fatal("Auto-load failed: %s", result.ErrorMessage)
+	}
+
+	logger.Info("Model auto-loaded successfully")
 }
 
 // ResolvePath resolves a path (absolute or relative to work directory)

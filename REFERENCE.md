@@ -419,6 +419,10 @@ export SHORTLIST_FILE=/path/to/lex.bin
 export VOCAB_FILE=/path/to/vocab.spm  # Single vocabulary
 # OR
 export VOCAB_FILES=/path/to/src.spm,/path/to/trg.spm  # Dual vocabularies
+
+# Note: Supports ~ expansion for home directory
+# Both work: MODEL_PATH=~/.config/mtran/models/en_zh-Hans
+#            MODEL_PATH=$HOME/.config/mtran/models/en_zh-Hans
 ```
 
 **Command-line Flags**:
