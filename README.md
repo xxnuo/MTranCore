@@ -1,3 +1,5 @@
+> Merged into [MTranServer](https://github.com/xxnuo/MTranServer), this repository is no longer updated.
+
 # MTranCore
 
 A translator core library based on webassembly and Go for cross-platform applications.
