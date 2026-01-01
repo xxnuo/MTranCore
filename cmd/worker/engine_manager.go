@@ -6,6 +6,7 @@ import (
 	"github.com/xxnuo/MTranCore/internal/logger"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -72,9 +73,14 @@ func (em *EngineManager) autoLoad() {
 		req.VocabularyPaths = em.config.VocabFiles
 	}
 	if req.Path == "" && req.ModelPath == "" {
-		logger.Error("No model configuration found")
-		logger.Error("Config details: ModelPath=%s, ModelFile=%s, WorkDir=%s", em.config.ModelPath, em.config.ModelFile, em.config.WorkDir)
-		logger.Fatal("No model configuration found. Set MODEL_PATH or MODEL_FILE environment variable")
+		if em.isModelDirectory(em.config.WorkDir) {
+			req.Path = em.config.WorkDir
+			logger.Info("Auto-detected model files in work directory: %s", em.config.WorkDir)
+		} else {
+			logger.Error("No model configuration found")
+			logger.Error("Config details: ModelPath=%s, ModelFile=%s, WorkDir=%s", em.config.ModelPath, em.config.ModelFile, em.config.WorkDir)
+			logger.Fatal("No model configuration found. Set MODEL_PATH or MODEL_FILE environment variable")
+		}
 	}
 
 	logger.Info("Loading model with config: Path=%s, ModelFile=%s", req.Path, req.ModelPath)
@@ -85,6 +91,25 @@ func (em *EngineManager) autoLoad() {
 		logger.Fatal("Auto-load failed: %s", result.ErrorMessage)
 	}
 	logger.Info("Model auto-loaded successfully")
+}
+
+func (em *EngineManager) isModelDirectory(path string) bool {
+	if _, err := os.Stat(filepath.Join(path, "model.npz")); err == nil {
+		return true
+	}
+	if _, err := os.Stat(filepath.Join(path, "model.bin")); err == nil {
+		return true
+	}
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return false
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() && strings.HasPrefix(entry.Name(), "model.") && (strings.HasSuffix(entry.Name(), ".bin") || strings.HasSuffix(entry.Name(), ".alphas.bin")) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolvePath resolves a path (absolute or relative to work directory)
